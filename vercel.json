@@ -1,8 +1,11 @@
 {
-  "builds": [
-    { "src": "build/web/**", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/(.*)", "dest": "build/web/index.html" }
+  "buildCommand": "echo 'Using pre-built files'",
+  "outputDirectory": "build/web",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
