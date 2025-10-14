@@ -1,0 +1,19 @@
+echo 'node_modules
+.dart_tool
+.packages
+.pub-cache
+.pub/
+build/
+!build/web/
+*.log
+.vscode/
+.idea/
+android/
+ios/
+linux/
+macos/
+web/
+windows/
+test/
+.flutter-plugins
+.flutter-plugins-dependencies' > .vercelignore
