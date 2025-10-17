@@ -1,11 +1,35 @@
-import 'package:RoyalClinic/dokter/Pemeriksaan.dart';
-import 'package:RoyalClinic/screen/register.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:RoyalClinic/services/local_notification_service.dart';
 import 'package:RoyalClinic/screen/login.dart';
+import 'package:RoyalClinic/screen/register.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize timezone
+  tz.initializeTimeZones();
+  tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
+  
+  // Request notification permissions
+  await _requestNotificationPermissions();
+  
+  // Initialize notification service
+  await LocalNotificationService().initialize();
+  
   runApp(const MyApp());
+}
+
+Future<void> _requestNotificationPermissions() async {
+  await Permission.notification.request();
+  
+  // For Android 13+ (API level 33+)
+  if (await Permission.notification.isDenied) {
+    await Permission.notification.request();
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -17,11 +41,9 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Royal Clinic',
       theme: ThemeData(
-        fontFamily: 'PlusJakartaSans', // ✅ Semua teks pakai Plus Jakarta Sans
+        fontFamily: 'PlusJakartaSans',
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
-
-        // ✅ Kamu juga bisa atur gaya default TextTheme-nya di sini
         textTheme: const TextTheme(
           bodyMedium: TextStyle(
             fontSize: 14,
@@ -37,8 +59,6 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-
-      // ✅ Locale Indonesia
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -48,7 +68,6 @@ class MyApp extends StatelessWidget {
         Locale('en', 'US'),
         Locale('id', 'ID'),
       ],
-
       home: const LoginPage(),
     );
   }

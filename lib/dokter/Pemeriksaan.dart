@@ -44,7 +44,7 @@ class _PemeriksaanState extends State<Pemeriksaan> {
   String _searchLayananQuery = '';
 
   // API Configuration
-  static const String baseUrl = 'https://admin.royal-klinik.cloud/api';
+  static const String baseUrl = 'http://10.227.74.71:8000/api';
   String? _authToken;
 
   @override

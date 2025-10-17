@@ -96,92 +96,169 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Future<void> loginUser() async {
-    if (!_formKey.currentState!.validate()) {
+  if (!_formKey.currentState!.validate()) return;
+
+  final username = usernameController.text.trim();
+  final password = passwordController.text.trim();
+
+  setState(() => isLoading = true);
+
+  try {
+    final response = await http.post(
+      Uri.parse('http://10.227.74.71:8000/api/login'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode({'username': username, 'password': password}),
+    );
+
+    Map<String, dynamic> data = {};
+    try { data = jsonDecode(response.body); } catch (_) {}
+
+    if (response.statusCode == 200 && (data['success'] == true)) {
+      await _saveCredentials();
+
+      final token = data['data']['token'] as String;
+      final user  = data['data']['user']  as Map<String, dynamic>;
+      final role  = (user['role'] as String?)?.toLowerCase() ?? '';
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', token);
+      await prefs.setString('username', user['username'] ?? '');
+      await prefs.setString('role', user['role'] ?? '');
+      await prefs.setInt('user_id', (user['id'] as num?)?.toInt() ?? 0);
+
+      // Kalau pasien, ambil profile pasien_id
+      if (role == 'pasien') {
+        try {
+          final profileResponse = await http.get(
+            Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          );
+          if (profileResponse.statusCode == 200) {
+            final profileData = jsonDecode(profileResponse.body)['data'];
+            await prefs.setInt('pasien_id', (profileData['id'] as num?)?.toInt() ?? 0);
+          }
+        } catch (_) {}
+      }
+
+      _showSuccessSnackBar('Selamat datang, ${user['username']}!');
+
+      if (!mounted) return;
+      if (role == 'dokter') {
+        // Kalau ingin verifikasi lagi via endpoint khusus dokter, panggil _loginAsDokter:
+        // await _loginAsDokter(username, password); return;
+
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, a, b) => const DokterDashboard(),
+            transitionsBuilder: (context, a, b, child) =>
+              SlideTransition(position: Tween<Offset>(begin: const Offset(1,0), end: Offset.zero).animate(a), child: child),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, a, b) => const MainWrapper(),
+            transitionsBuilder: (context, a, b, child) =>
+              SlideTransition(position: Tween<Offset>(begin: const Offset(1,0), end: Offset.zero).animate(a), child: child),
+          ),
+        );
+      }
       return;
     }
 
-    final username = usernameController.text.trim();
-    final password = passwordController.text.trim();
-
-    setState(() => isLoading = true);
-
-    try {
-      final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/login'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({'username': username, 'password': password}),
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        await _saveCredentials();
-        final userRole = data['data']['user']['role'] as String;
-        
-        if (userRole.toLowerCase() == 'dokter') {
-          await _loginAsDokter(username, password);
-        } else {
-          await _loginAsPasien(data);
+    // --- Error handling ---
+    if (response.statusCode == 401) {
+      // Akan berisi "Username salah" ATAU "Password salah"
+      final msg = (data['message'] as String?) ?? 'Kredensial tidak valid';
+      _showErrorSnackBar(msg);
+    } else if (response.statusCode == 403) {
+      _showErrorSnackBar((data['message'] as String?) ?? 'Akses ditolak');
+    } else if (response.statusCode == 422) {
+      final errors = (data['errors'] ?? {}) as Map<String, dynamic>;
+      final msgs = <String>[];
+      for (final k in ['username', 'password']) {
+        if (errors[k] is List && (errors[k] as List).isNotEmpty) {
+          msgs.add((errors[k] as List).first.toString());
         }
-      } else {
-        _showErrorSnackBar(data['message'] ?? 'Username atau password salah');
       }
-    } catch (e) {
-      _showErrorSnackBar('Terjadi kesalahan koneksi. Silakan coba lagi.');
-    } finally {
-      if (mounted) setState(() => isLoading = false);
+      _showErrorSnackBar(
+        msgs.isNotEmpty ? msgs.join('\n') : (data['message'] ?? 'Validasi gagal'),
+      );
+    } else {
+      _showErrorSnackBar((data['message'] as String?) ?? 'Login gagal. Silakan coba lagi.');
     }
+  } catch (e) {
+    _showErrorSnackBar('Terjadi kesalahan koneksi. Silakan coba lagi.');
+  } finally {
+    if (mounted) setState(() => isLoading = false);
   }
+}
+
 
   Future<void> _loginAsDokter(String username, String password) async {
-    try {
-      final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/login-dokter'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({'username': username, 'password': password}),
-      );
+  try {
+    final response = await http.post(
+      Uri.parse('http://10.227.74.71:8000/api/login-dokter'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode({'username': username, 'password': password}),
+    );
 
-      final data = jsonDecode(response.body);
+    Map<String, dynamic> data = {};
+    try { data = jsonDecode(response.body); } catch (_) {}
 
-      if (response.statusCode == 200 && data['success'] == true) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', data['data']['token']);
-        await prefs.setString('username', data['data']['user']['username']);
-        await prefs.setString('role', data['data']['user']['role']);
-        await prefs.setInt('user_id', data['data']['user']['id']);
+    if (response.statusCode == 200 && data['success'] == true) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', data['data']['token']);
+      await prefs.setString('username', data['data']['user']['username']);
+      await prefs.setString('role', data['data']['user']['role']);
+      await prefs.setInt('user_id', data['data']['user']['id']);
 
-        _showSuccessSnackBar('Selamat datang, Dr. ${data['data']['user']['username']}!');
+      _showSuccessSnackBar('Selamat datang, Dr. ${data['data']['user']['username']}!');
 
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => const DokterDashboard(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(1.0, 0.0),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                );
-              },
-            ),
-          );
-        }
-      } else {
-        _showErrorSnackBar(data['message'] ?? 'Login dokter gagal');
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, a, b) => const DokterDashboard(),
+            transitionsBuilder: (context, a, b, child) =>
+              SlideTransition(position: Tween<Offset>(begin: const Offset(1,0), end: Offset.zero).animate(a), child: child),
+          ),
+        );
       }
-    } catch (e) {
-      _showErrorSnackBar('Login dokter gagal. Silakan coba lagi.');
+    } else if (response.statusCode == 401) {
+      // Bisa "Username salah" atau "Password salah"
+      _showErrorSnackBar((data['message'] as String?) ?? 'Kredensial tidak valid');
+    } else if (response.statusCode == 403) {
+      _showErrorSnackBar((data['message'] as String?) ?? 'Akses ditolak');
+    } else if (response.statusCode == 422) {
+      final errors = (data['errors'] ?? {}) as Map<String, dynamic>;
+      final msgs = <String>[];
+      for (final k in ['username', 'password']) {
+        if (errors[k] is List && (errors[k] as List).isNotEmpty) {
+          msgs.add((errors[k] as List).first.toString());
+        }
+      }
+      _showErrorSnackBar(msgs.isNotEmpty ? msgs.join('\n') : (data['message'] ?? 'Validasi gagal'));
+    } else {
+      _showErrorSnackBar(data['message'] ?? 'Login dokter gagal');
     }
+  } catch (e) {
+    _showErrorSnackBar('Login dokter gagal. Silakan coba lagi.');
   }
+}
+
 
   Future<void> _loginAsPasien(Map<String, dynamic> data) async {
     try {
@@ -192,7 +269,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       await prefs.setInt('user_id', data['data']['user']['id']);
 
       final profileResponse = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+        Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer ${data['data']['token']}',
           'Content-Type': 'application/json',

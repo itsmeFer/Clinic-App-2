@@ -14,7 +14,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
   List<dynamic> filteredRiwayatPasien = [];
   bool isLoading = true;
   String? errorMessage;
-  String baseUrl = 'http://admin.royal-klinik.cloud/api';
+  String baseUrl = 'http://10.227.74.71:8000/api';
   TextEditingController searchController = TextEditingController();
   
   // Animation controllers
@@ -1007,7 +1007,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                                                 image: pasien['pasien']['foto_pasien'] != null
                                                     ? DecorationImage(
                                                         image: NetworkImage(
-                                                          'https://admin.royal-klinik.cloud/storage/${pasien['pasien']['foto_pasien']}',
+                                                          'http://10.227.74.71:8000/storage/${pasien['pasien']['foto_pasien']}',
                                                         ),
                                                         fit: BoxFit.cover,
                                                       )

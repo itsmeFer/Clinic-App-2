@@ -1,19 +1,130 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
+
 import 'package:RoyalClinic/pasien/Artikel.dart';
-import 'package:RoyalClinic/pasien/ListPembayaran.dart';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:RoyalClinic/pasien/Katalog.dart';
-import 'package:RoyalClinic/pasien/Pembayaran.dart';
+import 'package:RoyalClinic/pasien/ListPembayaran.dart';
 import 'package:RoyalClinic/pasien/PesanJadwal.dart';
 import 'package:RoyalClinic/pasien/Testimoni.dart';
 import 'package:RoyalClinic/pasien/edit_profile.dart';
 import 'package:RoyalClinic/pasien/RiwayatKunjungan.dart';
 import 'package:RoyalClinic/screen/login.dart';
+
+import 'package:RoyalClinic/widgets/royal_scaffold.dart'; // ⬅️ pakai RoyalScaffold
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Main wrapper - Clean & Elegant Design
+/// ============== THEME HELPERS (teal premium) ==============
+class TealX {
+  // Base teals
+  static const Color primary = Color(0xFF00897B); // teal 600-ish
+  static const Color primaryDark = Color(0xFF00695C);
+  static const Color primaryLight = Color(0xFF4DB6AC);
+
+  // Neutrals
+  static const Color bg = Color(0xFFF6FBFA);
+  static const Color card = Colors.white;
+  static const Color text = Color(0xFF0F1C1A);
+  static const Color textMuted = Color(0xFF6A7A77);
+
+  // Glass
+  static Color glassBg = Colors.white.withOpacity(0.75);
+  static Color glassBorder = Colors.white.withOpacity(0.45);
+
+  // Shadows
+  static List<BoxShadow> softShadow = [
+    BoxShadow(
+      color: const Color(0xFF00695C).withOpacity(0.08),
+      blurRadius: 18,
+      spreadRadius: 1,
+      offset: const Offset(0, 8),
+    ),
+  ];
+
+  static LinearGradient bgGradient = const LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFE7F4F2), // very light teal mist
+      Color(0xFFF8FFFE), // almost white
+    ],
+  );
+
+  static LinearGradient capsuleGradient = const LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [Color(0xFF00897B), Color(0xFF4DB6AC)],
+  );
+
+  static LinearGradient stat1 = const LinearGradient(
+    colors: [Color(0xFF42E695), Color(0xFF3BB2B8)],
+  );
+  static LinearGradient stat2 = const LinearGradient(
+    colors: [Color(0xFF16A085), Color(0xFF2ECC71)],
+  );
+}
+
+/// Kartu "glass"
+class GlassCard extends StatelessWidget {
+  const GlassCard({super.key, required this.child, this.padding, this.margin});
+  final Widget child;
+  final EdgeInsets? padding;
+  final EdgeInsets? margin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: margin,
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TealX.glassBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: TealX.glassBorder, width: 1),
+        boxShadow: TealX.softShadow,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Capsule button teal
+class CapsuleButton extends StatelessWidget {
+  const CapsuleButton({super.key, required this.text, this.onTap});
+  final String text;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        gradient: TealX.capsuleGradient,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: TealX.softShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Center(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                letterSpacing: 0.4,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ========================= MAIN WRAPPER =========================
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
 
@@ -24,7 +135,15 @@ class MainWrapper extends StatefulWidget {
 class _MainWrapperState extends State<MainWrapper> {
   int _selectedIndex = 0;
   List<dynamic> jadwalDokter = [];
-  PageController _pageController = PageController();
+  final PageController _pageController = PageController();
+
+  // 🔹 Judul per tab untuk AppBar global
+  final _titles = const [
+    'Beranda',
+    'Jadwal Dokter',
+    'Riwayat Kunjungan',
+    'Profil Saya',
+  ];
 
   @override
   void initState() {
@@ -33,29 +152,30 @@ class _MainWrapperState extends State<MainWrapper> {
   }
 
   Future<void> fetchJadwalDokter() async {
-  final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('token');
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
 
-  if (token == null) return;
+    final token = prefs.getString('token');
+    if (token == null) return;
 
-  try {
-    final response = await http.get(
-      Uri.parse('https://admin.royal-klinik.cloud/api/getAllDokter'),  // ✅ Use this instead
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    );
+    try {
+      final response = await http.get(
+        Uri.parse('http://10.227.74.71:8000/api/getAllDokter'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+      if (!mounted) return;
 
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200 && data['success'] == true) {
-      setState(() {
-        jadwalDokter = data['data'];  // This will now contain your doctor data
-      });
-    }
-  } catch (e) {
-      // Handle error silently
-    }
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        if (!mounted) return;
+        setState(() {
+          jadwalDokter = data['data'];
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> logout() async {
@@ -91,9 +211,7 @@ class _MainWrapperState extends State<MainWrapper> {
   }
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
     _pageController.jumpToPage(index);
   }
 
@@ -103,69 +221,76 @@ class _MainWrapperState extends State<MainWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+    return RoyalScaffold(
+      title: _titles[_selectedIndex],          // ⬅️ judul dinamis per tab
+      trailingActions: [                       // ⬅️ action kanan AppBar (logout)
+        IconButton(
+          icon: const Icon(Icons.logout, color: TealX.text),
+          onPressed: logout,
+          tooltip: 'Keluar',
+        ),
+      ],
       body: PageView(
         controller: _pageController,
-        onPageChanged: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onPageChanged: (index) => setState(() => _selectedIndex = index),
         children: [
+          // ⬇️ Halaman tanpa AppBar internal
           DashboardPage(
             jadwalDokter: jadwalDokter,
             onRefresh: _refreshData,
             onLogout: logout,
           ),
-          PesanJadwalPage(jadwalDokter: jadwalDokter),
-          const RiwayatKunjunganPage(),
-          EditProfileWrapper(onRefresh: _refreshData),
+          PesanJadwal(allJadwal: jadwalDokter),
+          const RiwayatKunjunganBody(),
+          const EditProfilePage(),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
+
+      // ⬇️ BottomNav tetap seperti sebelumnya
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.9),
+              border: Border.all(color: Colors.white.withOpacity(0.6)),
+              boxShadow: TealX.softShadow,
             ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          currentIndex: _selectedIndex,
-          onTap: _onItemTapped,
-          backgroundColor: Colors.transparent,
-          selectedItemColor: const Color(0xFF00897B),
-          unselectedItemColor: Colors.grey.shade500,
-          selectedFontSize: 12,
-          unselectedFontSize: 11,
-          elevation: 0,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'Beranda',
+            child: BottomNavigationBar(
+              type: BottomNavigationBarType.fixed,
+              currentIndex: _selectedIndex,
+              onTap: _onItemTapped,
+              backgroundColor: Colors.transparent,
+              selectedItemColor: TealX.primary,
+              unselectedItemColor: Colors.teal.shade200,
+              selectedFontSize: 12,
+              unselectedFontSize: 11,
+              elevation: 0,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home),
+                  label: 'Beranda',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.calendar_today_outlined),
+                  activeIcon: Icon(Icons.calendar_today),
+                  label: 'Jadwal',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  activeIcon: Icon(Icons.receipt_long),
+                  label: 'Riwayat',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.person_outline),
+                  activeIcon: Icon(Icons.person),
+                  label: 'Profil',
+                ),
+              ],
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_today_outlined),
-              activeIcon: Icon(Icons.calendar_today),
-              label: 'Jadwal',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_long_outlined),
-              activeIcon: Icon(Icons.receipt_long),
-              label: 'Riwayat',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: 'Profil',
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -178,7 +303,7 @@ class _MainWrapperState extends State<MainWrapper> {
   }
 }
 
-// Dashboard Page - Clean Design with Scroll AppBar
+// ========================= DASHBOARD PAGE =========================
 class DashboardPage extends StatefulWidget {
   final List<dynamic> jadwalDokter;
   final VoidCallback onRefresh;
@@ -198,10 +323,20 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   bool isLoading = true;
   Map<String, dynamic>? profileData;
+
+  // data publik
+  List<dynamic> heroSections = [];
+  List<dynamic> eventPromos = [];
+
+  // existing sections
+  List<dynamic> catalogList = [];
+  List<dynamic> articleList = [];
+  List<dynamic> testimoniList = [];
+
+  // UI controllers
   int _currentBanner = 0;
   final PageController _bannerController = PageController();
   final ScrollController _scrollController = ScrollController();
-  double _scrollOffset = 0.0;
   Timer? _bannerTimer;
 
   @override
@@ -211,14 +346,10 @@ class _DashboardPageState extends State<DashboardPage> {
     fetchCatalog();
     fetchArticles();
     fetchTestimoni();
-    _startBannerAutoPlay();
+    fetchHeroSections();
+    fetchEventPromos();
 
-    // Listen to scroll changes
-    _scrollController.addListener(() {
-      setState(() {
-        _scrollOffset = _scrollController.offset;
-      });
-    });
+    _startBannerAutoPlay();
   }
 
   @override
@@ -229,41 +360,27 @@ class _DashboardPageState extends State<DashboardPage> {
     super.dispose();
   }
 
-  void _startBannerAutoPlay() {
-    _bannerTimer?.cancel();
-    _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted && _bannerController.hasClients) {
-        int nextPage = (_currentBanner + 1) % 3;
-        _bannerController.animateToPage(
-          nextPage,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
-  }
-
+  // ====================== FETCHERS ======================
   Future<void> fetchProfile() async {
-    if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     final token = prefs.getString('token');
 
-    if (token == null) {
-      setState(() => isLoading = false);
-      return;
-    }
-
     try {
-      final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+      if (token == null) {
+        setState(() => isLoading = false);
+        return;
+      }
+      final res = await http.get(
+        Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       );
-
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
+      if (!mounted) return;
+      final data = jsonDecode(res.body);
+      if (res.statusCode == 200 && data['success'] == true) {
         setState(() {
           profileData = data['data'];
           isLoading = false;
@@ -271,1479 +388,524 @@ class _DashboardPageState extends State<DashboardPage> {
       } else {
         setState(() => isLoading = false);
       }
-    } catch (e) {
+    } catch (_) {
+      if (!mounted) return;
       setState(() => isLoading = false);
     }
   }
 
-  List<dynamic> catalogList = [];
-  List<dynamic> articleList = [];
-  List<dynamic> testimoniList = [];
-
-  Map<int, Map<String, dynamic>> getUniqueDokter() {
-    final Map<int, Map<String, dynamic>> uniqueDokter = {};
-
-    for (var jadwal in widget.jadwalDokter) {
-      final dokter = jadwal['dokter'];
-      if (dokter != null) {
-        final dokterId = dokter['id'];
-
-        if (!uniqueDokter.containsKey(dokterId)) {
-          final totalJadwal = widget.jadwalDokter
-              .where(
-                (j) => j['dokter'] != null && j['dokter']['id'] == dokterId,
-              )
-              .length;
-
-          uniqueDokter[dokterId] = {
-            'dokter': dokter,
-            'total_jadwal': totalJadwal,
-            'sample_jadwal': jadwal,
-          };
-        }
-      }
-    }
-
-    return uniqueDokter;
-  }
-
   Future<void> fetchCatalog() async {
     try {
-      final response = await http.get(
+      final res = await http.get(
         Uri.parse('https://backend.royal-klinik.cloud/api/upload/catalogs'),
-        headers: {'Content-Type': 'application/json'},
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
         if (data['success'] == true) {
-          setState(() {
-            catalogList = data['data']['catalogs'] ?? [];
-          });
+          setState(() => catalogList = data['data']['catalogs'] ?? []);
         }
       }
-    } catch (e) {
-      // Handle error silently
-    }
+    } catch (_) {}
   }
 
   Future<void> fetchArticles() async {
     try {
-      final response = await http.get(
+      final res = await http.get(
         Uri.parse('https://backend.royal-klinik.cloud/api/upload/articles'),
-        headers: {'Content-Type': 'application/json'},
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
         if (data['success'] == true) {
-          setState(() {
-            articleList = data['data']['articles'] ?? [];
-          });
+          setState(() => articleList = data['data']['articles'] ?? []);
         }
       }
-    } catch (e) {
-      // Handle error silently
-    }
+    } catch (_) {}
   }
 
   Future<void> fetchTestimoni() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
       final token = prefs.getString('token');
-
-      final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getDataTestimoni'),
+      final res = await http.get(
+        Uri.parse('http://10.227.74.71:8000/api/getDataTestimoni'),
         headers: {if (token != null) 'Authorization': 'Bearer $token'},
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          testimoniList = data['Data Testimoni'] ?? [];
-        });
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        setState(() => testimoniList = data['Data Testimoni'] ?? []);
       }
-    } catch (e) {
-      // Handle error silently
+    } catch (_) {}
+  }
+
+  Future<void> fetchHeroSections() async {
+    try {
+      final res = await http.get(
+        Uri.parse(
+          'https://backend.royal-klinik.cloud/api/upload/hero-sections',
+        ),
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          final sections = (data['data']?['sections'] as List?) ?? [];
+          setState(
+            () => heroSections =
+                sections.where((e) => e['is_active'] == true).toList(),
+          );
+          _startBannerAutoPlay();
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> fetchEventPromos() async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://backend.royal-klinik.cloud/api/upload/event-promos'),
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          setState(
+            () => eventPromos = (data['data']?['eventPromos'] as List?) ?? [],
+          );
+        }
+      }
+    } catch (_) {}
+  }
+
+  // ====================== HELPERS ======================
+  void _startBannerAutoPlay() {
+    _bannerTimer?.cancel();
+    _bannerTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || !_bannerController.hasClients) return;
+      final count = heroSections.isNotEmpty ? heroSections.length : 0;
+      if (count <= 1) return;
+      final next = (_currentBanner + 1) % count;
+      _bannerController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  Map<int, Map<String, dynamic>> getUniqueDokter() {
+    final Map<int, Map<String, dynamic>> unique = {};
+    for (final item in widget.jadwalDokter) {
+      if (item is! Map) continue;
+      final dokterId = item['id_dokter'] ?? item['id'];
+      if (dokterId == null) continue;
+      final List jadwalList = (item['jadwal'] as List?) ?? [];
+      unique[dokterId] = {
+        'dokter': item,
+        'total_jadwal': jadwalList.length,
+        'sample_jadwal': jadwalList.isNotEmpty ? jadwalList.first : null,
+      };
     }
+    return unique;
   }
 
-  // Helper method untuk safe image loading
-  Widget buildSafeImage({
-    required String? imagePath,
-    required double width,
-    required double height,
-    required IconData fallbackIcon,
-    required double iconSize,
-    required Color iconColor,
-    required BorderRadius borderRadius,
-  }) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: iconColor.withOpacity(0.1),
-        borderRadius: borderRadius,
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: (imagePath != null && imagePath.trim().isNotEmpty)
-            ? Image.network(
-                'https://admin.royal-klinik.cloud/storage/$imagePath',
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Center(
-                    child: CircularProgressIndicator(
-                      value: loadingProgress.expectedTotalBytes != null
-                          ? loadingProgress.cumulativeBytesLoaded /
-                              loadingProgress.expectedTotalBytes!
-                          : null,
-                      strokeWidth: 2,
-                      color: iconColor,
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Icon(
-                    fallbackIcon,
-                    size: iconSize,
-                    color: iconColor,
-                  );
-                },
-              )
-            : Icon(
-                fallbackIcon,
-                size: iconSize,
-                color: iconColor,
-              ),
-      ),
-    );
-  }
-
+  // ====================== UI ======================
   @override
   Widget build(BuildContext context) {
     final pasien = profileData;
 
-    // Calculate AppBar opacity based on scroll - lebih smooth dengan range yang lebih besar
-    double appBarOpacity = (_scrollOffset / 200).clamp(0.0, 1.0);
+    if (isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: TealX.primary),
+      );
+    }
+    if (pasien == null) {
+      return const Center(child: Text('Tidak ada data profil'));
+    }
 
-    return isLoading
-        ? const Center(
-            child: CircularProgressIndicator(color: Color(0xFF00897B)),
-          )
-        : pasien == null
-        ? const Center(child: Text('Tidak ada data profil'))
-        : Scaffold(
-            backgroundColor: Colors.grey.shade50,
-            extendBodyBehindAppBar: true,
-            appBar: PreferredSize(
-              preferredSize: const Size.fromHeight(kToolbarHeight),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Color.lerp(
-                    Colors.white.withOpacity(0.0), // Mulai dari transparan
-                    const Color(0xFF00897B), // Berubah ke teal
-                    appBarOpacity,
+    // ⬇️ Tidak pakai AppBar lokal; RoyalScaffold sudah handle AppBar global
+    return ListView(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      children: [
+        // PROFILE (glass)
+        GlassCard(
+          padding: const EdgeInsets.all(18),
+          child: _ProfileCard(pasien: pasien),
+        ),
+        const SizedBox(height: 14),
+
+        // BANNER dari API
+        _BannerFromApi(
+          controller: _bannerController,
+          items: heroSections,
+          onChanged: (i) => setState(() => _currentBanner = i),
+          currentIndex: _currentBanner,
+        ),
+        if (heroSections.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(heroSections.length, (i) {
+                final active = _currentBanner == i;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: active ? 20 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: active
+                        ? TealX.primary
+                        : TealX.primary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  boxShadow: appBarOpacity > 0.3
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(
-                              0.15 * appBarOpacity,
-                            ),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: AppBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  automaticallyImplyLeading: false,
-                  title: Row(
-                    children: [
-                      Image.asset(
-                        'assets/gambar/logo.png',
-                        height: 28,
-                        width: 28,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Royal Clinic',
-                        style: TextStyle(
-                          color: Color.lerp(
-                            Colors.black87, // Mulai dari hitam
-                            Colors.white, // Berubah ke putih
-                            appBarOpacity,
-                          ),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.logout,
-                        color: Color.lerp(
-                          Colors.grey.shade700, // Mulai dari abu-abu
-                          Colors.white, // Berubah ke putih
-                          appBarOpacity,
-                        ),
-                        size: 22,
-                      ),
-                      onPressed: widget.onLogout,
-                    ),
-                  ],
+                );
+              }),
+            ),
+          ),
+
+        // Event/Promo
+        if (eventPromos.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const _SectionTitle(title: 'Event & Promo'),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 140,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: eventPromos.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, i) =>
+                  _PromoCardHorizontal(item: eventPromos[i]),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+
+        // MENU GRID
+        const SizedBox(height: 6),
+        Transform.translate(
+          offset: const Offset(0, -4),
+          child: GlassCard(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: _MenuGrid(),
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // Quick stats
+        _QuickStats(
+          catalogCount: catalogList.length,
+          jadwalCount: widget.jadwalDokter.length,
+        ),
+        const SizedBox(height: 18),
+
+        // Tips
+        GlassCard(child: _InfoTips()),
+        const SizedBox(height: 18),
+
+        // Dokter Tersedia
+        GlassCard(
+          child: _DokterTersediaSection(jadwalDokter: widget.jadwalDokter),
+        ),
+        const SizedBox(height: 18),
+
+        // Katalog
+        GlassCard(child: _KatalogSection(catalogList: catalogList)),
+        const SizedBox(height: 18),
+
+        // Artikel
+        GlassCard(child: _ArtikelSection(articleList: articleList)),
+        const SizedBox(height: 18),
+
+        // Testimoni
+        GlassCard(child: _TestimoniSection(testimoniList: testimoniList)),
+
+        const SizedBox(height: 72),
+      ],
+    );
+  }
+}
+
+// ========================= SUBWIDGETS =========================
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({required this.pasien});
+  final Map<String, dynamic> pasien;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _safeImageSquare(
+          url: pasien['foto_pasien'] != null
+              ? 'http://10.227.74.71:8000/storage/${pasien['foto_pasien']}'
+              : null,
+          size: 58,
+          fallbackIcon: Icons.person,
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                (pasien['nama_pasien']?.toString().isNotEmpty == true)
+                    ? pasien['nama_pasien']
+                    : pasien['username'] ?? '-',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: TealX.text,
                 ),
               ),
-            ),
-            body: ListView(
-              controller: _scrollController,
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + kToolbarHeight + 16,
-                left: 16,
-                right: 16,
-                bottom: 16,
+              const SizedBox(height: 4),
+              Text(
+                pasien['email']?.toString() ?? '-',
+                style: const TextStyle(fontSize: 13, color: TealX.textMuted),
               ),
-              children: [
-                // Banner Carousel
-                Container(
-                  height: 160,
-                  margin: const EdgeInsets.only(bottom: 0),
-                  child: Stack(
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ========================= IMPROVED BANNER FROM API =========================
+class _BannerFromApi extends StatelessWidget {
+  const _BannerFromApi({
+    required this.controller,
+    required this.items,
+    required this.onChanged,
+    required this.currentIndex,
+  });
+
+  final PageController controller;
+  final List<dynamic> items;
+  final void Function(int) onChanged;
+  final int currentIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasData = items.isNotEmpty;
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: TealX.softShadow,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: hasData
+            ? PageView.builder(
+                controller: controller,
+                onPageChanged: onChanged,
+                itemCount: items.length,
+                itemBuilder: (_, i) {
+                  final it = items[i] as Map<String, dynamic>;
+                  final imageUrl = (it['imageUrl'] ?? '').toString();
+                  final pos = (it['position'] ?? 'center')
+                      .toString()
+                      .toLowerCase();
+                  final texts = _extractLocalizedTexts(context, it);
+
+                  return Stack(
+                    fit: StackFit.expand,
                     children: [
-                      PageView(
-                        controller: _bannerController,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentBanner = index;
-                          });
-                        },
-                        children: [
-                          // Banner 1 - Gradient Purple
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF667EEA,
-                                  ).withOpacity(0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  right: -20,
-                                  bottom: -20,
-                                  child: Icon(
-                                    Icons.local_hospital,
-                                    size: 140,
-                                    color: Colors.white.withOpacity(0.1),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Promo Spesial',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      const Text(
-                                        'Konsultasi Gratis\nUntuk Pasien Baru!',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          height: 1.3,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Dapatkan sesi konsultasi pertama gratis',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Banner 2 - Gradient Blue
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF00B4DB), Color(0xFF0083B0)],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF00B4DB,
-                                  ).withOpacity(0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  right: -20,
-                                  bottom: -20,
-                                  child: Icon(
-                                    Icons.health_and_safety,
-                                    size: 140,
-                                    color: Colors.white.withOpacity(0.1),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Layanan Unggulan',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      const Text(
-                                        'Medical Check-Up\nLengkap',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          height: 1.3,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Paket pemeriksaan kesehatan menyeluruh',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Banner 3 - Gradient Teal
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF11998E), Color(0xFF38EF7D)],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF11998E,
-                                  ).withOpacity(0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  right: -20,
-                                  bottom: -20,
-                                  child: Icon(
-                                    Icons.medical_services,
-                                    size: 140,
-                                    color: Colors.white.withOpacity(0.1),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Info Penting',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      const Text(
-                                        'Layanan 24 Jam\nSetiap Hari!',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          height: 1.3,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Kami siap melayani Anda kapan saja',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Indicator dots
-                      Positioned(
-                        bottom: 12,
-                        left: 0,
-                        right: 0,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(3, (index) {
-                            return Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              width: _currentBanner == index ? 20 : 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _currentBanner == index
-                                    ? Colors.white
-                                    : Colors.white.withOpacity(0.4),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            );
-                          }),
-                        ),
+                      // Background image with better loading
+                      _BackgroundImage(imageUrl: imageUrl),
+
+                      // Enhanced gradient overlay for better text visibility
+                      _GradientOverlay(),
+
+                      // Improved text overlay
+                      _EnhancedTextOverlay(
+                        position: pos,
+                        title: texts['title']!,
+                        subtitle: texts['subtitle']!,
                       ),
                     ],
-                  ),
-                ),
-
-                // Menu Grid
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 0.85,
-                  children: [
-                    _buildMenuItem(
-                      imagePath: 'assets/icons/testimoni.png',
-                      label: 'Testimoni',
-                      color: const Color(0xFF7B1FA2),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const TestimoniPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuItem(
-                      imagePath: 'assets/icons/artikel.png',
-                      label: 'Artikel',
-                      color: const Color(0xFF1976D2),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const Artikel(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuItem(
-                      imagePath: 'assets/icons/layanan.png',
-                      label: 'Layanan',
-                      color: const Color(0xFFE64A19),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const Katalog(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuItem(
-                      imagePath: 'assets/icons/bayar.png',
-                      label: 'Bayar',
-                      color: const Color(0xFF388E3C),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ListPembayaran(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Profile Section - FIXED
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white,
-                        const Color(0xFF00897B).withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFF00897B).withOpacity(0.1),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      buildSafeImage(
-                        imagePath: profileData?['foto_pasien']?.toString(),
-                        width: 60,
-                        height: 60,
-                        fallbackIcon: Icons.person,
-                        iconSize: 32,
-                        iconColor: const Color(0xFF00897B),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              (pasien['nama_pasien']?.toString().isNotEmpty == true)
-                                  ? pasien['nama_pasien']
-                                  : pasien['username'] ?? '-',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              pasien['email']?.toString() ?? '-',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Quick Stats Cards
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF667EEA).withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.medical_services,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Total Layanan',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${catalogList.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFFF093FB), Color(0xFFF5576C)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFF093FB).withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.calendar_today,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Jadwal Tersedia',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${widget.jadwalDokter.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Info Banner
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF00D2FF), Color(0xFF3A7BD5)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF00D2FF).withOpacity(0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.info_outline,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Tips Kesehatan',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Jangan lupa minum air putih 8 gelas sehari dan istirahat cukup!',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Dokter Tersedia Section
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Dokter Tersedia',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    if (widget.jadwalDokter.isNotEmpty)
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  PesanJadwal(allJadwal: widget.jadwalDokter),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Lihat Semua',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF00897B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                if (widget.jadwalDokter.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.people_outline,
-                            size: 48,
-                            color: Colors.grey.shade300,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Belum ada dokter tersedia',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  Builder(
-                    builder: (context) {
-                      final uniqueDokter = getUniqueDokter();
-                      final dokterList = uniqueDokter.values.toList();
-
-                      return Column(
-                        children: [
-                          ...dokterList.take(3).map((dokterData) {
-                            final dokter = dokterData['dokter'];
-                            final totalJadwal = dokterData['total_jadwal'];
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                children: [
-                                  buildSafeImage(
-                                    imagePath: dokter['foto_dokter']?.toString(),
-                                    width: 80,
-                                    height: 80,
-                                    fallbackIcon: Icons.person,
-                                    iconSize: 40,
-                                    iconColor: const Color(0xFF00897B),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          dokter['nama_dokter']?.toString() ??
-                                              'Nama tidak tersedia',
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          dokter['jenis_spesialis']
-                                                  ?['nama_spesialis']
-                                                  ?.toString() ??
-                                              'Spesialis Umum',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey.shade600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(
-                                              0xFF00897B,
-                                            ).withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '$totalJadwal jadwal tersedia',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Color(0xFF00897B),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ],
-                      );
-                    },
-                  ),
-
-                const SizedBox(height: 24),
-
-                // Katalog Layanan Section
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Katalog Layanan',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    if (catalogList.isNotEmpty)
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const Katalog(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Lihat Semua',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF00897B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                if (catalogList.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.medical_services_outlined,
-                            size: 48,
-                            color: Colors.grey.shade300,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Belum ada katalog layanan',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  Column(
-                    children: catalogList.take(3).map((catalog) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const Katalog(),
-                              ),
-                            );
-                          },
-                          child: Row(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  catalog['imageUrl']?.toString() ?? '',
-                                  width: 100,
-                                  height: 100,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: Colors.grey.shade300,
-                                      child: const Icon(
-                                        Icons.image_not_supported,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      catalog['title']?.toString() ?? 'Tidak ada judul',
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      catalog['category']?['name']?.toString() ?? 'Kategori tidak ada',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-
-                const SizedBox(height: 24),
-                // Artikel Kesehatan Section
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Artikel Kesehatan',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    if (articleList.isNotEmpty)
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const Artikel(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Lihat Semua',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF00897B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                if (articleList.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.article_outlined,
-                            size: 48,
-                            color: Colors.grey.shade300,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Belum ada artikel tersedia',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  Column(
-                    children: articleList.take(3).map((article) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const Artikel(),
-                              ),
-                            );
-                          },
-                          child: Row(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  article['imageUrl']?.toString() ?? '',
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: Colors.grey.shade300,
-                                      child: const Icon(Icons.article),
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      article['title']?.toString() ?? 'Tidak ada judul',
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      article['category']?['name']?.toString() ?? 'Kategori tidak ada',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-
-                const SizedBox(height: 24),
-
-                // Testimoni Section
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Testimoni Pasien',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    if (testimoniList.isNotEmpty)
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const TestimoniPage(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Lihat Semua',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF00897B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                if (testimoniList.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.rate_review_outlined,
-                            size: 48,
-                            color: Colors.grey.shade300,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Belum ada testimoni',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  Column(
-                    children: testimoniList.take(3).map((testimoni) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const TestimoniPage(),
-                              ),
-                            );
-                          },
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFF00897B,
-                                  ).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    testimoni['nama_testimoni']?.toString().isNotEmpty == true
-                                        ? testimoni['nama_testimoni'][0].toString().toUpperCase()
-                                        : 'T',
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF00897B),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      testimoni['nama_testimoni']?.toString() ?? 'Nama tidak tersedia',
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      testimoni['isi_testimoni']?.toString() ?? 'Tidak ada testimoni',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-
-                const SizedBox(height: 80),
-              ],
-            ),
-          );
+                  );
+                },
+              )
+            : _bannerFallback(),
+      ),
+    );
   }
 
-  Widget _buildMenuItem({
-    required String imagePath,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
+  Widget _bannerFallback() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            TealX.primary.withOpacity(0.1),
+            TealX.primaryLight.withOpacity(0.1),
           ],
         ),
+      ),
+      child: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Flexible(
-              flex: 3,
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      right: -5,
-                      bottom: -5,
-                      child: Image.asset(
-                        imagePath,
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
+            Icon(Icons.image, color: TealX.primary, size: 48),
+            SizedBox(height: 8),
+            Text(
+              'Banner akan muncul di sini',
+              style: TextStyle(color: TealX.textMuted, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Map<String, String> _extractLocalizedTexts(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) {
+    final String lang =
+        Localizations.localeOf(context).languageCode; // 'id' atau 'en'
+    final List i18n = (item['i18n'] as List?) ?? [];
+
+    Map? chosen = i18n.cast<Map?>().firstWhere(
+      (m) => (m?['locale'] ?? '').toString().toLowerCase() == lang,
+      orElse: () => null,
+    );
+
+    chosen ??= i18n.cast<Map?>().firstWhere(
+      (m) => (m?['locale'] ?? '').toString().toLowerCase() == 'en',
+      orElse: () => null,
+    );
+
+    String title = (chosen?['title'] ?? '').toString().trim();
+    String subtitle = (chosen?['subtitle'] ?? '').toString().trim();
+
+    final pageKey = (item['page_key'] ?? '').toString().toLowerCase();
+    if (title.isEmpty || subtitle.isEmpty) {
+      final defaults = _defaultCopy(pageKey, lang);
+      if (title.isEmpty) title = defaults['title']!;
+      if (subtitle.isEmpty) subtitle = defaults['subtitle']!;
+    }
+
+    return {'title': title, 'subtitle': subtitle};
+  }
+
+  Map<String, String> _defaultCopy(String pageKey, String lang) {
+    final bool isId = lang == 'id';
+
+    switch (pageKey) {
+      case 'home':
+        return {
+          'title':
+              isId ? 'Kesehatan Anda, Prioritas Kami' : 'Your Health, Our Priority',
+          'subtitle': isId
+              ? 'Layanan klinik tepercaya dengan dokter profesional dan fasilitas modern.'
+              : 'Trusted clinic services with professional doctors and modern facilities.',
+        };
+      case 'about':
+        return {
+          'title': isId ? 'Tentang Royal Clinic' : 'About Royal Clinic',
+          'subtitle': isId
+              ? 'Memberikan perawatan terbaik dengan sentuhan manusiawi sejak hari pertama.'
+              : 'Delivering the best care with a human touch from day one.',
+        };
+      default:
+        return {
+          'title': 'Royal Clinic',
+          'subtitle': isId
+              ? 'Solusi kesehatan terpadu untuk Anda dan keluarga.'
+              : 'Integrated healthcare for you and your family.',
+        };
+    }
+  }
+}
+
+// ========================= BACKGROUND IMAGE COMPONENT =========================
+class _BackgroundImage extends StatelessWidget {
+  const _BackgroundImage({required this.imageUrl});
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return imageUrl.isEmpty
+        ? Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  TealX.primary.withOpacity(0.1),
+                  TealX.primaryLight.withOpacity(0.1),
+                ],
+              ),
+            ),
+          )
+        : Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    TealX.primary.withOpacity(0.1),
+                    TealX.primaryLight.withOpacity(0.1),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Flexible(
-              flex: 1,
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Colors.black87,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: const Center(
+                child: Icon(Icons.image_not_supported,
+                    color: TealX.primary, size: 48),
               ),
             ),
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      TealX.primary.withOpacity(0.05),
+                      TealX.primaryLight.withOpacity(0.05),
+                    ],
+                  ),
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: TealX.primary,
+                  ),
+                ),
+              );
+            },
+          );
+  }
+}
+
+// ========================= ENHANCED GRADIENT OVERLAY =========================
+class _GradientOverlay extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          stops: const [0.0, 0.4, 0.8, 1.0],
+          colors: [
+            Colors.black.withOpacity(0.75), // Strong at bottom
+            Colors.black.withOpacity(0.45),
+            Colors.black.withOpacity(0.15),
+            Colors.transparent, // Transparent at top
           ],
         ),
       ),
@@ -1751,160 +913,1133 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-// Wrapper classes
-class PesanJadwalPage extends StatelessWidget {
-  final List<dynamic> jadwalDokter;
+// ========================= ENHANCED TEXT OVERLAY =========================
+class _EnhancedTextOverlay extends StatelessWidget {
+  const _EnhancedTextOverlay({
+    required this.position,
+    required this.title,
+    required this.subtitle,
+  });
 
-  const PesanJadwalPage({super.key, required this.jadwalDokter});
+  final String position;
+  final String title;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: const Text(
-          'Jadwal Dokter',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-          ),
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Always position text at bottom regardless of position parameter
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          screenWidth * 0.05, // 5% dari lebar layar
+          60,
+          screenWidth * 0.05, // 5% dari lebar layar
+          20,
+        ),
+        child: _ElegantTextCard(
+          title: title,
+          subtitle: subtitle,
+          crossAlignment: CrossAxisAlignment.start,
+          textAlign: TextAlign.left,
+          screenWidth: screenWidth,
         ),
       ),
-      body: PesanJadwal(allJadwal: jadwalDokter),
     );
   }
 }
 
-class RiwayatKunjunganPage extends StatelessWidget {
-  const RiwayatKunjunganPage({super.key});
+// ========================= ELEGANT TEXT CARD =========================
+class _ElegantTextCard extends StatelessWidget {
+  const _ElegantTextCard({
+    required this.title,
+    required this.subtitle,
+    required this.crossAlignment,
+    required this.textAlign,
+    required this.screenWidth,
+  });
+
+  final String title;
+  final String subtitle;
+  final CrossAxisAlignment crossAlignment;
+  final TextAlign textAlign;
+  final double screenWidth;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: const Text(
-          'Riwayat Kunjungan',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
+    // Font sizes yang lebih kecil
+    final titleSize = screenWidth < 360
+        ? 14.0
+        : screenWidth < 400
+            ? 15.0
+            : screenWidth < 500
+                ? 16.0
+                : 17.0;
+
+    final subtitleSize = screenWidth < 360
+        ? 11.0
+        : screenWidth < 400
+            ? 11.5
+            : screenWidth < 500
+                ? 12.0
+                : 12.5;
+
+    // Max width responsif
+    final maxWidth = screenWidth * 0.85; // Dikurangi dari 90% ke 85%
+
+    return Container(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: crossAlignment,
+        children: [
+          // Title
+          Text(
+            title,
+            textAlign: textAlign,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: titleSize,
+              fontWeight: FontWeight.w800,
+              height: 1.15,
+              letterSpacing: 0.1,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withOpacity(0.8),
+                  blurRadius: 6,
+                  offset: const Offset(0, 1.5),
+                ),
+                Shadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 3,
+                  offset: const Offset(0, 0.5),
+                ),
+              ],
+            ),
           ),
-        ),
+
+          SizedBox(height: screenWidth < 360 ? 4 : 5),
+
+          // Subtitle
+          Text(
+            subtitle,
+            textAlign: textAlign,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.92),
+              fontSize: subtitleSize,
+              fontWeight: FontWeight.w400,
+              height: 1.25,
+              letterSpacing: 0.05,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withOpacity(0.7),
+                  blurRadius: 4,
+                  offset: const Offset(0, 0.5),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
-      body: const RiwayatKunjungan(),
     );
   }
 }
 
-class EditProfileWrapper extends StatelessWidget {
-  final VoidCallback onRefresh;
-
-  const EditProfileWrapper({super.key, required this.onRefresh});
+// Promo horizontal card (glass + teal accents)
+class _PromoCardHorizontal extends StatelessWidget {
+  const _PromoCardHorizontal({required this.item});
+  final Map<String, dynamic> item;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: const Text(
-          'Profil Saya',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-          ),
-        ),
+    final imageUrl = (item['imageUrl'] ?? '').toString();
+    final title = (item['title'] ?? 'Promo').toString();
+    final date = (item['date'] ?? '').toString();
+
+    return Container(
+      width: 252,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.6)),
+        boxShadow: TealX.softShadow,
       ),
-      body: Container(
-        color: Colors.grey.shade50,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius:
+                const BorderRadius.horizontal(left: Radius.circular(16)),
+            child: Image.network(
+              imageUrl,
+              width: 104,
+              height: 124,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: 104,
+                height: 124,
+                color: const Color(0x1100897B),
+                child: const Icon(
+                  Icons.image_not_supported,
+                  color: TealX.primary,
+                ),
               ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00897B).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      size: 40,
-                      color: Color(0xFF00897B),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Edit Profil Anda',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  _chip('Promo'),
+                  const SizedBox(height: 4),
                   Text(
-                    'Perbarui informasi profil Anda',
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14.5,
+                      color: TealX.text,
+                    ),
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const EditProfilePage(),
-                          ),
-                        ).then((result) {
-                          if (result == true) {
-                            onRefresh();
-                          }
-                        });
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00897B),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'Edit Profil',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                  const Spacer(),
+                  Row(
+                    children: [
+                      const Icon(Icons.event, size: 14, color: TealX.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        date,
+                        style: const TextStyle(
+                          color: TealX.textMuted,
+                          fontSize: 12.5,
                         ),
                       ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: TealX.capsuleGradient,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 11.5,
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title});
+  final String title;
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        color: TealX.text,
+        letterSpacing: 0.2,
+      ),
+    );
+  }
+}
+
+// Image square helper
+Widget _safeImageSquare({
+  required String? url,
+  required double size,
+  required IconData fallbackIcon,
+}) {
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(14),
+    child: SizedBox(
+      width: size,
+      height: size,
+      child: url == null || url.isEmpty
+          ? Container(
+              color: const Color(0x1400897B),
+              child: Icon(fallbackIcon, color: TealX.primary),
+            )
+          : Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: const Color(0x1400897B),
+                child: Icon(fallbackIcon, color: TealX.primary),
+              ),
+            ),
+    ),
+  );
+}
+
+class _MenuGrid extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 4,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 0.9,
+      padding: EdgeInsets.zero,
+      children: [
+        _menuItem(
+          context,
+          'assets/icons/testimoni.png',
+          'Testimoni',
+          const Color(0xFF7B1FA2),
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TestimoniPage()),
+          ),
+        ),
+        _menuItem(
+          context,
+          'assets/icons/artikel.png',
+          'Artikel',
+          const Color(0xFF1976D2),
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const Artikel()),
+          ),
+        ),
+        _menuItem(
+          context,
+          'assets/icons/layanan.png',
+          'Layanan',
+          const Color(0xFFE64A19),
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const Katalog()),
+          ),
+        ),
+        _menuItem(
+          context,
+          'assets/icons/bayar.png',
+          'Bayar',
+          const Color(0xFF388E3C),
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ListPembayaran()),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+Widget _menuItem(
+  BuildContext context,
+  String img,
+  String label,
+  Color color,
+  VoidCallback onTap,
+) {
+  return InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(16),
+    child: Container(
+      padding: const EdgeInsets.all(0),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.6)),
+        boxShadow: TealX.softShadow,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Flexible(
+            flex: 3,
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [color.withOpacity(0.18), color.withOpacity(0.12)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    right: -6,
+                    bottom: -6,
+                    child: Image.asset(
+                      img,
+                      width: 52,
+                      height: 52,
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
+          const SizedBox(height: 6),
+          Flexible(
+            flex: 1,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: TealX.text,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _QuickStats extends StatelessWidget {
+  const _QuickStats({required this.catalogCount, required this.jadwalCount});
+  final int catalogCount;
+  final int jadwalCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _modernStatCard(
+            'Total Layanan',
+            catalogCount,
+            Icons.medical_services_rounded,
+            TealX.primary,
+          ),
         ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _modernStatCard(
+            'Jadwal Tersedia',
+            jadwalCount,
+            Icons.calendar_today_rounded,
+            TealX.primaryDark,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _modernStatCard(
+      String label, int value, IconData icon, Color primaryColor) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: primaryColor.withOpacity(0.1),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.08),
+            blurRadius: 20,
+            spreadRadius: 0,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: primaryColor.withOpacity(0.04),
+            blurRadius: 6,
+            spreadRadius: 0,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Icon dengan background circle
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: primaryColor, size: 24),
+          ),
+          const SizedBox(height: 14),
+
+          // Value
+          Text(
+            '$value',
+            style: TextStyle(
+              color: primaryColor,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          // Label
+          const Text(
+            'Total Layanan',
+            style: TextStyle(
+              color: TealX.textMuted,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
       ),
     );
-  }}
+  }
+}
+
+class _InfoTips extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: TealX.primary.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.info_outline, color: TealX.primary, size: 28),
+        ),
+        const SizedBox(width: 16),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Tips Kesehatan',
+                style: TextStyle(
+                  color: TealX.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Jangan lupa minum air putih 8 gelas sehari dan istirahat cukup!',
+                style: TextStyle(
+                  color: TealX.textMuted,
+                  fontSize: 13.5,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DokterTersediaSection extends StatelessWidget {
+  const _DokterTersediaSection({required this.jadwalDokter});
+  final List<dynamic> jadwalDokter;
+
+  Map<int, Map<String, dynamic>> _unique(List<dynamic> data) {
+    final Map<int, Map<String, dynamic>> unique = {};
+    for (final item in data) {
+      if (item is! Map) continue;
+      final dokterId = item['id_dokter'] ?? item['id'];
+      if (dokterId == null) continue;
+      final List jadwalList = (item['jadwal'] as List?) ?? [];
+      unique[dokterId] = {
+        'dokter': item,
+        'total_jadwal': jadwalList.length,
+        'sample_jadwal': jadwalList.isNotEmpty ? jadwalList.first : null,
+      };
+    }
+    return unique;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uniqueDokter = _unique(jadwalDokter).values.toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Dokter Tersedia',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: TealX.text,
+              ),
+            ),
+            if (jadwalDokter.isNotEmpty)
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PesanJadwal(allJadwal: jadwalDokter),
+                  ),
+                ),
+                child: const Text(
+                  'Lihat Semua',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: TealX.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (jadwalDokter.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: TealX.softShadow,
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.people_outline,
+                  size: 48,
+                  color: Colors.teal.shade100,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Belum ada dokter tersedia',
+                  style: TextStyle(color: TealX.textMuted, fontSize: 14),
+                ),
+              ],
+            ),
+          )
+        else
+          Column(
+            children: uniqueDokter.take(3).map((dokterData) {
+              final dokter = dokterData['dokter'];
+              final totalJadwal = dokterData['total_jadwal'];
+              final foto = dokter['foto_dokter']?.toString();
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: TealX.softShadow,
+                ),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: (foto == null || foto.isEmpty)
+                          ? Container(
+                              width: 70,
+                              height: 70,
+                              color: TealX.primary.withOpacity(0.08),
+                              child: const Icon(
+                                Icons.person,
+                                color: TealX.primary,
+                                size: 36,
+                              ),
+                            )
+                          : Image.network(
+                              'http://10.227.74.71:8000/storage/$foto',
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 70,
+                                height: 70,
+                                color: TealX.primary.withOpacity(0.08),
+                                child: const Icon(
+                                  Icons.person,
+                                  color: TealX.primary,
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            dokter['nama_dokter']?.toString() ??
+                                'Nama tidak tersedia',
+                            style: const TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: TealX.text,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            dokter['jenis_spesialis']?['nama_spesialis']
+                                    ?.toString() ??
+                                'Spesialis Umum',
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              color: TealX.textMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: TealX.primary.withOpacity(0.10),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$totalJadwal jadwal tersedia',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: TealX.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+}
+
+class _KatalogSection extends StatelessWidget {
+  const _KatalogSection({required this.catalogList});
+  final List<dynamic> catalogList;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Katalog Layanan',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: TealX.text,
+              ),
+            ),
+            if (catalogList.isNotEmpty)
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const Katalog()),
+                ),
+                child: const Text(
+                  'Lihat Semua',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: TealX.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (catalogList.isEmpty)
+          _emptyCard(
+            icon: Icons.medical_services_outlined,
+            text: 'Belum ada katalog layanan',
+          )
+        else
+          Column(
+            children: catalogList.take(3).map((c) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: TealX.softShadow,
+                ),
+                child: InkWell(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const Katalog()),
+                  ),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          (c['imageUrl'] ?? '').toString(),
+                          width: 88,
+                          height: 88,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 88,
+                            height: 88,
+                            color: Colors.grey.shade300,
+                            child: const Icon(Icons.image_not_supported),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              c['title']?.toString() ?? 'Tidak ada judul',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: TealX.text,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              c['category']?['name']?.toString() ??
+                                  'Kategori tidak ada',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: TealX.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+}
+
+class _ArtikelSection extends StatelessWidget {
+  const _ArtikelSection({required this.articleList});
+  final List<dynamic> articleList;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Artikel Kesehatan',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: TealX.text,
+              ),
+            ),
+            if (articleList.isNotEmpty)
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const Artikel()),
+                ),
+                child: const Text(
+                  'Lihat Semua',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: TealX.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (articleList.isEmpty)
+          _emptyCard(
+            icon: Icons.article_outlined,
+            text: 'Belum ada artikel tersedia',
+          )
+        else
+          Column(
+            children: articleList.take(3).map((a) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: TealX.softShadow,
+                ),
+                child: InkWell(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const Artikel()),
+                  ),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          (a['imageUrl'] ?? '').toString(),
+                          width: 58,
+                          height: 58,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 58,
+                            height: 58,
+                            color: Colors.grey.shade300,
+                            child: const Icon(Icons.article),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              a['title']?.toString() ?? 'Tidak ada judul',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: TealX.text,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              a['category']?['name']?.toString() ??
+                                  'Kategori tidak ada',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: TealX.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+}
+
+class _TestimoniSection extends StatelessWidget {
+  const _TestimoniSection({required this.testimoniList});
+  final List<dynamic> testimoniList;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Testimoni Pasien',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: TealX.text,
+              ),
+            ),
+            if (testimoniList.isNotEmpty)
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TestimoniPage()),
+                ),
+                child: const Text(
+                  'Lihat Semua',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: TealX.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (testimoniList.isEmpty)
+          _emptyCard(
+            icon: Icons.rate_review_outlined,
+            text: 'Belum ada testimoni',
+          )
+        else
+          Column(
+            children: testimoniList.take(3).map((t) {
+              final nama = (t['nama_testimoni'] ?? 'Tamu').toString();
+              final initial = nama.isNotEmpty ? nama[0].toUpperCase() : 'T';
+              final isi = (t['isi_testimoni'] ?? '').toString();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: TealX.softShadow,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: TealX.primary.withOpacity(0.10),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: TealX.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            nama,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: TealX.text,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            isi,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: TealX.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+}
+
+Widget _emptyCard({required IconData icon, required String text}) {
+  return Container(
+    padding: const EdgeInsets.all(26),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      boxShadow: TealX.softShadow,
+    ),
+    child: Column(
+      children: [
+        Icon(icon, size: 44, color: Colors.teal.shade100),
+        const SizedBox(height: 10),
+        Text(
+          text,
+          style: const TextStyle(color: TealX.textMuted, fontSize: 14),
+        ),
+      ],
+    ),
+  );
+}
+
+// ========================= WRAPPERS (tanpa Scaffold lokal) =========================
+
+/// Body Jadwal: cukup return konten — AppBar global dihandle RoyalScaffold
+class PesanJadwalBody extends StatelessWidget {
+  final List<dynamic> jadwalDokter;
+  const PesanJadwalBody({super.key, required this.jadwalDokter});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(gradient: TealX.bgGradient),
+      child: const SafeArea(
+        top: false,
+        child: SizedBox.shrink(), // ganti dengan body asli jika perlu wrapper
+      ),
+    );
+  }
+}
+
+/// Body Riwayat: cukup return konten — AppBar global dihandle RoyalScaffold
+class RiwayatKunjunganBody extends StatelessWidget {
+  const RiwayatKunjunganBody({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const RiwayatKunjungan();
+  }
+}

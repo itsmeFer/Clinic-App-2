@@ -55,7 +55,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
       }
 
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/kunjungan/riwayat/$pasienId'),
+        Uri.parse('http://10.227.74.71:8000/api/kunjungan/riwayat/$pasienId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -111,7 +111,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
       print('Request Body: $requestBody');
 
       final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/kunjungan/batalkan'),
+        Uri.parse('http://10.227.74.71:8000/api/kunjungan/batalkan'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -125,7 +125,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
 
       if (!mounted) return;
 
-      if (response.body.startsWith('<!DOCTYPE html>') || 
+      if (response.body.startsWith('<!DOCTYPE html>') ||
           response.body.startsWith('<html>')) {
         print('ERROR: Received HTML response instead of JSON');
         _showErrorSnackBar('Endpoint tidak ditemukan. Periksa URL API.');
@@ -146,15 +146,18 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
       print('Parsed Data: $data');
 
       bool isSuccess = false;
-      
+
       if (response.statusCode == 200) {
-        if (data['success'] == true || 
-            data['success'] == 'true' || 
+        if (data['success'] == true ||
+            data['success'] == 'true' ||
             data['success'] == 1 ||
             data['success'] == '1' ||
             data['status'] == 'success' ||
             data['status'] == 200 ||
-            (data['message'] != null && data['message'].toString().toLowerCase().contains('berhasil'))) {
+            (data['message'] != null &&
+                data['message'].toString().toLowerCase().contains(
+                  'berhasil',
+                ))) {
           isSuccess = true;
         }
       }
@@ -162,7 +165,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
       if (isSuccess) {
         await fetchRiwayatKunjungan();
         if (mounted) {
-          _showSuccessSnackBar(data['message'] ?? 'Kunjungan berhasil dibatalkan');
+          _showSuccessSnackBar(
+            data['message'] ?? 'Kunjungan berhasil dibatalkan',
+          );
         }
       } else {
         if (mounted) {
@@ -190,7 +195,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
           children: [
             const Icon(Icons.check_circle, color: Colors.white, size: 20),
             const SizedBox(width: 8),
-            Expanded(child: Text(message, style: const TextStyle(fontSize: 14))),
+            Expanded(
+              child: Text(message, style: const TextStyle(fontSize: 14)),
+            ),
           ],
         ),
         backgroundColor: const Color(0xFF4CAF50),
@@ -209,7 +216,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
           children: [
             const Icon(Icons.error_outline, color: Colors.white, size: 20),
             const SizedBox(width: 8),
-            Expanded(child: Text(message, style: const TextStyle(fontSize: 14))),
+            Expanded(
+              child: Text(message, style: const TextStyle(fontSize: 14)),
+            ),
           ],
         ),
         backgroundColor: const Color(0xFFE53935),
@@ -281,8 +290,19 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
     try {
       final date = DateTime.parse(dateString);
       final months = [
-        '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-        'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
+        '',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'Mei',
+        'Jun',
+        'Jul',
+        'Ags',
+        'Sep',
+        'Okt',
+        'Nov',
+        'Des',
       ];
       return '${date.day} ${months[date.month]} ${date.year}';
     } catch (e) {
@@ -293,7 +313,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
   String formatCurrency(dynamic amount) {
     if (amount == null) return 'Rp 0';
     try {
-      final number = amount is String ? double.parse(amount) : amount.toDouble();
+      final number = amount is String
+          ? double.parse(amount)
+          : amount.toDouble();
       return 'Rp ${number.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}';
     } catch (e) {
       return 'Rp 0';
@@ -306,7 +328,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
       final birthDate = DateTime.parse(tanggalLahir);
       final today = DateTime.now();
       int age = today.year - birthDate.year;
-      if (today.month < birthDate.month || 
+      if (today.month < birthDate.month ||
           (today.month == birthDate.month && today.day < birthDate.day)) {
         age--;
       }
@@ -354,7 +376,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
               borderRadius: BorderRadius.circular(9),
               child: pasienInfo!['foto_pasien'] != null
                   ? Image.network(
-                      'https://admin.royal-klinik.cloud/storage/${pasienInfo!['foto_pasien']}',
+                      'http://10.227.74.71:8000/storage/${pasienInfo!['foto_pasien']}',
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return const Icon(
@@ -398,8 +420,8 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                     ),
                     const SizedBox(width: 12),
                     Icon(
-                      pasienInfo!['jenis_kelamin'] == 'Laki-laki' 
-                          ? Icons.male 
+                      pasienInfo!['jenis_kelamin'] == 'Laki-laki'
+                          ? Icons.male
                           : Icons.female,
                       size: 14,
                       color: Colors.white70,
@@ -414,12 +436,16 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                     ),
                   ],
                 ),
-                if (pasienInfo!['alamat'] != null && 
+                if (pasienInfo!['alamat'] != null &&
                     pasienInfo!['alamat'].toString().isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.location_on, size: 14, color: Colors.white70),
+                      const Icon(
+                        Icons.location_on,
+                        size: 14,
+                        color: Colors.white70,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -458,11 +484,17 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: const Color(0xFF00897B),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.medical_information, color: Colors.white, size: 24),
+                    const Icon(
+                      Icons.medical_information,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
@@ -481,7 +513,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                   ],
                 ),
               ),
-              
+
               // Content
               Expanded(
                 child: SingleChildScrollView(
@@ -492,9 +524,14 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                       // Status Badge
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          color: getStatusColor(kunjungan['status'] ?? '').withOpacity(0.1),
+                          color: getStatusColor(
+                            kunjungan['status'] ?? '',
+                          ).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: getStatusColor(kunjungan['status'] ?? ''),
@@ -513,7 +550,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                             Text(
                               getStatusText(kunjungan['status'] ?? ''),
                               style: TextStyle(
-                                color: getStatusColor(kunjungan['status'] ?? ''),
+                                color: getStatusColor(
+                                  kunjungan['status'] ?? '',
+                                ),
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -522,62 +561,57 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Basic Information
-                      _buildSection(
-                        'Informasi Kunjungan',
-                        Icons.info_outline,
-                        [
-                          DetailRow(
-                            icon: Icons.confirmation_number,
-                            label: 'No. Antrian',
-                            value: kunjungan['no_antrian'] ?? '-',
+                      _buildSection('Informasi Kunjungan', Icons.info_outline, [
+                        DetailRow(
+                          icon: Icons.confirmation_number,
+                          label: 'No. Antrian',
+                          value: kunjungan['no_antrian'] ?? '-',
+                        ),
+                        DetailRow(
+                          icon: Icons.calendar_today,
+                          label: 'Tanggal',
+                          value: formatDate(
+                            kunjungan['tanggal_kunjungan'] ?? '',
                           ),
-                          DetailRow(
-                            icon: Icons.calendar_today,
-                            label: 'Tanggal',
-                            value: formatDate(kunjungan['tanggal_kunjungan'] ?? ''),
-                          ),
-                          DetailRow(
-                            icon: Icons.medical_services,
-                            label: 'Keluhan Awal',
-                            value: kunjungan['keluhan_awal'] ?? '-',
-                            isMultiline: true,
-                          ),
-                        ],
-                      ),
-                      
+                        ),
+                        DetailRow(
+                          icon: Icons.medical_services,
+                          label: 'Keluhan Awal',
+                          value: kunjungan['keluhan_awal'] ?? '-',
+                          isMultiline: true,
+                        ),
+                      ]),
+
                       // Doctor Information
                       if (kunjungan['dokter'] != null) ...[
                         const SizedBox(height: 16),
-                        _buildSection(
-                          'Informasi Dokter',
-                          Icons.person,
-                          [
-                            DetailRow(
-                              icon: Icons.person,
-                              label: 'Nama Dokter',
-                              value: kunjungan['dokter']['nama_dokter'] ?? '-',
-                            ),
-                           DetailRow(
-  icon: Icons.local_hospital,
-  label: 'Poli',
-  value: kunjungan['dokter']['spesialisasi'] ?? 'Umum',
-),
-                            DetailRow(
-                              icon: Icons.phone,
-                              label: 'No. HP',
-                              value: kunjungan['dokter']['no_hp'] ?? '-',
-                            ),
-                            DetailRow(
-                              icon: Icons.work_outline,
-                              label: 'Pengalaman',
-                              value: kunjungan['dokter']['pengalaman'] ?? '-',
-                            ),
-                          ],
-                        ),
+                        _buildSection('Informasi Dokter', Icons.person, [
+                          DetailRow(
+                            icon: Icons.person,
+                            label: 'Nama Dokter',
+                            value: kunjungan['dokter']['nama_dokter'] ?? '-',
+                          ),
+                          DetailRow(
+                            icon: Icons.local_hospital,
+                            label: 'Poli',
+                            value:
+                                kunjungan['dokter']['spesialisasi'] ?? 'Umum',
+                          ),
+                          DetailRow(
+                            icon: Icons.phone,
+                            label: 'No. HP',
+                            value: kunjungan['dokter']['no_hp'] ?? '-',
+                          ),
+                          DetailRow(
+                            icon: Icons.work_outline,
+                            label: 'Pengalaman',
+                            value: kunjungan['dokter']['pengalaman'] ?? '-',
+                          ),
+                        ]),
                       ],
-                      
+
                       // EMR Information
                       if (kunjungan['emr'] != null) ...[
                         const SizedBox(height: 16),
@@ -599,43 +633,52 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                                 value: kunjungan['emr']['diagnosis'],
                                 isMultiline: true,
                               ),
-                            if (kunjungan['emr']['riwayat_penyakit_sekarang'] != null)
+                            if (kunjungan['emr']['riwayat_penyakit_sekarang'] !=
+                                null)
                               DetailRow(
                                 icon: Icons.history,
                                 label: 'Riwayat Penyakit Sekarang',
-                                value: kunjungan['emr']['riwayat_penyakit_sekarang'],
+                                value:
+                                    kunjungan['emr']['riwayat_penyakit_sekarang'],
                                 isMultiline: true,
                               ),
-                            if (kunjungan['emr']['riwayat_penyakit_dahulu'] != null)
+                            if (kunjungan['emr']['riwayat_penyakit_dahulu'] !=
+                                null)
                               DetailRow(
                                 icon: Icons.history_edu,
                                 label: 'Riwayat Penyakit Dahulu',
-                                value: kunjungan['emr']['riwayat_penyakit_dahulu'],
+                                value:
+                                    kunjungan['emr']['riwayat_penyakit_dahulu'],
                                 isMultiline: true,
                               ),
-                            if (kunjungan['emr']['riwayat_penyakit_keluarga'] != null)
+                            if (kunjungan['emr']['riwayat_penyakit_keluarga'] !=
+                                null)
                               DetailRow(
                                 icon: Icons.family_restroom,
                                 label: 'Riwayat Penyakit Keluarga',
-                                value: kunjungan['emr']['riwayat_penyakit_keluarga'],
+                                value:
+                                    kunjungan['emr']['riwayat_penyakit_keluarga'],
                                 isMultiline: true,
                               ),
                           ],
                         ),
-                        
+
                         // Vital Signs
                         if (kunjungan['emr']['tanda_vital'] != null) ...[
                           const SizedBox(height: 16),
-                          _buildVitalSignsSection(kunjungan['emr']['tanda_vital']),
+                          _buildVitalSignsSection(
+                            kunjungan['emr']['tanda_vital'],
+                          ),
                         ],
                       ],
-                      
+
                       // Prescription Information
-                      if (kunjungan['resep_obat'] != null && kunjungan['resep_obat'].isNotEmpty) ...[
+                      if (kunjungan['resep_obat'] != null &&
+                          kunjungan['resep_obat'].isNotEmpty) ...[
                         const SizedBox(height: 16),
                         _buildPrescriptionSection(kunjungan['resep_obat']),
                       ],
-                      
+
                       // Payment Information
                       if (kunjungan['pembayaran'] != null) ...[
                         const SizedBox(height: 16),
@@ -668,7 +711,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: const Color(0xFF00897B).withOpacity(0.1),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
             ),
             child: Row(
               children: [
@@ -710,7 +755,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.red.shade100,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
             ),
             child: const Row(
               children: [
@@ -785,7 +832,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.blue.shade100,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
             ),
             child: const Row(
               children: [
@@ -830,10 +879,13 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
-                              color: prescription['status'] == 'Sudah Diambil' 
-                                  ? Colors.green.shade100 
+                              color: prescription['status'] == 'Sudah Diambil'
+                                  ? Colors.green.shade100
                                   : Colors.orange.shade100,
                               borderRadius: BorderRadius.circular(6),
                             ),
@@ -842,8 +894,8 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: prescription['status'] == 'Sudah Diambil' 
-                                    ? Colors.green.shade700 
+                                color: prescription['status'] == 'Sudah Diambil'
+                                    ? Colors.green.shade700
                                     : Colors.orange.shade700,
                               ),
                             ),
@@ -875,7 +927,8 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                         value: formatCurrency(prescription['subtotal']),
                         isCompact: true,
                       ),
-                      if (prescription['keterangan'] != null && prescription['keterangan'].isNotEmpty)
+                      if (prescription['keterangan'] != null &&
+                          prescription['keterangan'].isNotEmpty)
                         DetailRow(
                           icon: Icons.note,
                           label: 'Keterangan',
@@ -910,7 +963,9 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.green.shade100,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
             ),
             child: const Row(
               children: [
@@ -967,10 +1022,13 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                   ),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: payment['status'] == 'Sudah Bayar' 
-                        ? Colors.green.shade100 
+                    color: payment['status'] == 'Sudah Bayar'
+                        ? Colors.green.shade100
                         : Colors.orange.shade100,
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -978,12 +1036,12 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        payment['status'] == 'Sudah Bayar' 
-                            ? Icons.check_circle 
+                        payment['status'] == 'Sudah Bayar'
+                            ? Icons.check_circle
                             : Icons.schedule,
                         size: 16,
-                        color: payment['status'] == 'Sudah Bayar' 
-                            ? Colors.green.shade700 
+                        color: payment['status'] == 'Sudah Bayar'
+                            ? Colors.green.shade700
                             : Colors.orange.shade700,
                       ),
                       const SizedBox(width: 8),
@@ -992,8 +1050,8 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: payment['status'] == 'Sudah Bayar' 
-                              ? Colors.green.shade700 
+                          color: payment['status'] == 'Sudah Bayar'
+                              ? Colors.green.shade700
                               : Colors.orange.shade700,
                         ),
                       ),
@@ -1009,58 +1067,130 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
   }
 
   @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    backgroundColor: Colors.grey.shade50,
-    appBar: AppBar(
-      // Tambahkan leading icon
-      leading: IconButton(
-        icon: const Icon(Icons.home),
-        onPressed: () {
-          // Navigasi ke Dashboard dan hapus semua route sebelumnya
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const MainWrapper()),
-            (route) => false,
-          );
-        },
-        tooltip: 'Kembali ke Beranda',
-      ),
-      title: const Text(
-        'Riwayat Kunjungan',
-        style: TextStyle(
-          color: Colors.black87,
-          fontWeight: FontWeight.w600,
-          fontSize: 18,
-        ),
-      ),
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black87,
-      elevation: 0,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh),
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        // Tambahkan leading icon
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            if (mounted) {
-              setState(() {
-                isLoading = true;
-                errorMessage = null;
-              });
-            }
-            fetchRiwayatKunjungan();
+            // Navigasi ke Dashboard dan hapus semua route sebelumnya
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const MainWrapper()),
+              (route) => false,
+            );
           },
+          tooltip: 'Kembali ke Beranda',
         ),
-      ],
-    ),
+        title: const Text(
+          'Riwayat Kunjungan',
+          style: TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              if (mounted) {
+                setState(() {
+                  isLoading = true;
+                  errorMessage = null;
+                });
+              }
+              fetchRiwayatKunjungan();
+            },
+          ),
+        ],
+      ),
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF00897B),
-              ),
+              child: CircularProgressIndicator(color: Color(0xFF00897B)),
             )
           : errorMessage != null
-              ? Container(
-                  padding: const EdgeInsets.all(24),
+          ? Container(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      child: Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red.shade300,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Oops! Terjadi Kesalahan',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      errorMessage!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (mounted) {
+                          setState(() {
+                            isLoading = true;
+                            errorMessage = null;
+                          });
+                        }
+                        fetchRiwayatKunjungan();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00897B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Coba Lagi',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : riwayatList.isEmpty
+          ? Column(
+              children: [
+                _buildPasienInfoCard(),
+                Expanded(
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1068,18 +1198,18 @@ Widget build(BuildContext context) {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.red.shade50,
+                            color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(50),
                           ),
                           child: Icon(
-                            Icons.error_outline,
+                            Icons.history,
                             size: 48,
-                            color: Colors.red.shade300,
+                            color: Colors.grey.shade400,
                           ),
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          'Oops! Terjadi Kesalahan',
+                          'Belum Ada Riwayat',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -1088,515 +1218,533 @@ Widget build(BuildContext context) {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          errorMessage!,
+                          'Anda belum memiliki riwayat kunjungan',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey.shade600,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () {
-                            if (mounted) {
-                              setState(() {
-                                isLoading = true;
-                                errorMessage = null;
-                              });
-                            }
-                            fetchRiwayatKunjungan();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00897B),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Text(
-                            'Coba Lagi',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                )
-              : riwayatList.isEmpty
-                  ? Column(
-                      children: [
-                        _buildPasienInfoCard(),
-                        Expanded(
-                          child: Center(
+                ),
+              ],
+            )
+          : RefreshIndicator(
+              onRefresh: fetchRiwayatKunjungan,
+              color: const Color(0xFF00897B),
+              child: ListView(
+                children: [
+                  _buildPasienInfoCard(),
+
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: riwayatList.length,
+                    itemBuilder: (context, index) {
+                      final kunjungan = riwayatList[index];
+                      final dokter = kunjungan['dokter'];
+                      final status = kunjungan['status'] ?? '';
+                      final hasEMR = kunjungan['emr'] != null;
+                      final hasPrescription =
+                          kunjungan['resep_obat'] != null &&
+                          kunjungan['resep_obat'].isNotEmpty;
+                      final payment = kunjungan['pembayaran'];
+
+                      final canCancel = [
+                        'pending',
+                        'waiting',
+                      ].contains(status.toLowerCase());
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: InkWell(
+                          onTap: () => showKunjunganDetail(kunjungan),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
                             child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 60,
+                                      height: 60,
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFF00897B,
+                                        ).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: dokter?['foto_dokter'] != null
+                                            ? Image.network(
+                                                'http://10.227.74.71:8000/storage/${dokter['foto_dokter']}',
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return const Icon(
+                                                        Icons.person,
+                                                        size: 32,
+                                                        color: Color(
+                                                          0xFF00897B,
+                                                        ),
+                                                      );
+                                                    },
+                                              )
+                                            : const Icon(
+                                                Icons.person,
+                                                size: 32,
+                                                color: Color(0xFF00897B),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            dokter?['nama_dokter'] ??
+                                                'Nama tidak tersedia',
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.black87,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            formatDate(
+                                              kunjungan['tanggal_kunjungan'] ??
+                                                  '',
+                                            ),
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                          if (dokter?['spesialisasi'] !=
+                                              null) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Poli ${dokter['spesialisasi']}', // Tambahkan prefix "Poli"
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: const Color(0xFF00897B),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: getStatusColor(
+                                          status,
+                                        ).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: getStatusColor(status),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            getStatusIcon(status),
+                                            size: 14,
+                                            color: getStatusColor(status),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            getStatusText(status),
+                                            style: TextStyle(
+                                              color: getStatusColor(status),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+
                                 Container(
-                                  padding: const EdgeInsets.all(16),
+                                  padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(50),
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Icon(
-                                    Icons.history,
-                                    size: 48,
-                                    color: Colors.grey.shade400,
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.confirmation_number,
+                                            size: 16,
+                                            color: Color(0xFF00897B),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'No. Antrian: ${kunjungan['no_antrian'] ?? '-'}',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.black87,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Icon(
+                                            Icons.medical_services,
+                                            size: 16,
+                                            color: Color(0xFF00897B),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Keluhan: ${kunjungan['keluhan_awal'] ?? '-'}',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.black87,
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(height: 20),
-                                const Text(
-                                  'Belum Ada Riwayat',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
+
+                                // Additional info badges
+                                if (hasEMR ||
+                                    hasPrescription ||
+                                    payment != null) ...[
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      if (hasEMR)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.shade100,
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.medical_information,
+                                                size: 12,
+                                                color: Colors.blue.shade700,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'EMR',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.blue.shade700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      if (hasPrescription)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple.shade100,
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.medication,
+                                                size: 12,
+                                                color: Colors.purple.shade700,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '${kunjungan['resep_obat'].length} Obat',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.purple.shade700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      if (payment != null)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                payment['status'] ==
+                                                    'Sudah Bayar'
+                                                ? Colors.green.shade100
+                                                : Colors.orange.shade100,
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                payment['status'] ==
+                                                        'Sudah Bayar'
+                                                    ? Icons.check_circle
+                                                    : Icons.payment,
+                                                size: 12,
+                                                color:
+                                                    payment['status'] ==
+                                                        'Sudah Bayar'
+                                                    ? Colors.green.shade700
+                                                    : Colors.orange.shade700,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                formatCurrency(
+                                                  payment['total_tagihan'],
+                                                ),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color:
+                                                      payment['status'] ==
+                                                          'Sudah Bayar'
+                                                      ? Colors.green.shade700
+                                                      : Colors.orange.shade700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Anda belum memiliki riwayat kunjungan',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade600,
+                                ],
+
+                                if (canCancel) ...[
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red.shade500,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        elevation: 0,
+                                      ),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) => AlertDialog(
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                            title: Row(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.all(
+                                                    8,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.red.shade50,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.cancel,
+                                                    color: Colors.red.shade500,
+                                                    size: 24,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                const Text(
+                                                  'Batalkan Kunjungan',
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            content: Text(
+                                              'Apakah Anda yakin ingin membatalkan kunjungan dengan Dr. ${dokter?['nama_dokter'] ?? 'Dokter'} pada ${formatDate(kunjungan['tanggal_kunjungan'] ?? '')}?',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            actions: [
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(
+                                                            context,
+                                                          ),
+                                                      style: TextButton.styleFrom(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              vertical: 12,
+                                                            ),
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                          side: BorderSide(
+                                                            color: Colors
+                                                                .grey
+                                                                .shade300,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      child: const Text(
+                                                        'Tidak',
+                                                        style: TextStyle(
+                                                          fontSize: 15,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: Colors.black87,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: ElevatedButton(
+                                                      onPressed: () {
+                                                        Navigator.pop(context);
+                                                        batalkanKunjungan(
+                                                          kunjungan['id'],
+                                                        );
+                                                      },
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.red.shade500,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              vertical: 12,
+                                                            ),
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                        ),
+                                                        elevation: 0,
+                                                      ),
+                                                      child: const Text(
+                                                        'Ya, Batalkan',
+                                                        style: TextStyle(
+                                                          fontSize: 15,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                      child: const Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.cancel, size: 18),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'Batalkan Kunjungan',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
                         ),
-                      ],
-                    )
-                  : RefreshIndicator(
-                      onRefresh: fetchRiwayatKunjungan,
-                      color: const Color(0xFF00897B),
-                      child: ListView(
-                        children: [
-                          _buildPasienInfoCard(),
-                          
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            itemCount: riwayatList.length,
-                            itemBuilder: (context, index) {
-                              final kunjungan = riwayatList[index];
-                              final dokter = kunjungan['dokter'];
-                              final status = kunjungan['status'] ?? '';
-                              final hasEMR = kunjungan['emr'] != null;
-                              final hasPrescription = kunjungan['resep_obat'] != null && kunjungan['resep_obat'].isNotEmpty;
-                              final payment = kunjungan['pembayaran'];
-                              
-                              final canCancel = [
-                                'pending',
-                                'waiting',
-                              ].contains(status.toLowerCase());
-
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: InkWell(
-                                  onTap: () => showKunjunganDetail(kunjungan),
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Container(
-                                              width: 60,
-                                              height: 60,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF00897B).withOpacity(0.1),
-                                                borderRadius: BorderRadius.circular(12),
-                                              ),
-                                              child: ClipRRect(
-                                                borderRadius: BorderRadius.circular(12),
-                                                child: dokter?['foto_dokter'] != null
-                                                    ? Image.network(
-                                                        'https://admin.royal-klinik.cloud/storage/${dokter['foto_dokter']}',
-                                                        fit: BoxFit.cover,
-                                                        errorBuilder: (context, error, stackTrace) {
-                                                          return const Icon(
-                                                            Icons.person,
-                                                            size: 32,
-                                                            color: Color(0xFF00897B),
-                                                          );
-                                                        },
-                                                      )
-                                                    : const Icon(
-                                                        Icons.person,
-                                                        size: 32,
-                                                        color: Color(0xFF00897B),
-                                                      ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    dokter?['nama_dokter'] ?? 'Nama tidak tersedia',
-                                                    style: const TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Colors.black87,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    formatDate(kunjungan['tanggal_kunjungan'] ?? ''),
-                                                    style: TextStyle(
-                                                      fontSize: 13,
-                                                      color: Colors.grey.shade600,
-                                                    ),
-                                                  ),
-                                                  if (dokter?['spesialisasi'] != null) ...[
-  const SizedBox(height: 2),
-  Text(
-    'Poli ${dokter['spesialisasi']}', // Tambahkan prefix "Poli"
-    style: TextStyle(
-      fontSize: 12,
-      color: const Color(0xFF00897B),
-      fontWeight: FontWeight.w500,
-    ),
-  ),
-],
-                                                ],
-                                              ),
-                                            ),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 6,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: getStatusColor(status).withOpacity(0.1),
-                                                borderRadius: BorderRadius.circular(8),
-                                                border: Border.all(
-                                                  color: getStatusColor(status),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    getStatusIcon(status),
-                                                    size: 14,
-                                                    color: getStatusColor(status),
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    getStatusText(status),
-                                                    style: TextStyle(
-                                                      color: getStatusColor(status),
-                                                      fontSize: 11,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-
-                                        Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.shade50,
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Column(
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  const Icon(
-                                                    Icons.confirmation_number,
-                                                    size: 16,
-                                                    color: Color(0xFF00897B),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text(
-                                                    'No. Antrian: ${kunjungan['no_antrian'] ?? '-'}',
-                                                    style: const TextStyle(
-                                                      fontSize: 13,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: Colors.black87,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Row(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  const Icon(
-                                                    Icons.medical_services,
-                                                    size: 16,
-                                                    color: Color(0xFF00897B),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      'Keluhan: ${kunjungan['keluhan_awal'] ?? '-'}',
-                                                      style: const TextStyle(
-                                                        fontSize: 13,
-                                                        color: Colors.black87,
-                                                      ),
-                                                      maxLines: 2,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-
-                                        // Additional info badges
-                                        if (hasEMR || hasPrescription || payment != null) ...[
-                                          const SizedBox(height: 8),
-                                          Wrap(
-                                            spacing: 6,
-                                            runSpacing: 6,
-                                            children: [
-                                              if (hasEMR)
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.blue.shade100,
-                                                    borderRadius: BorderRadius.circular(6),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Icon(Icons.medical_information, size: 12, color: Colors.blue.shade700),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        'EMR',
-                                                        style: TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight: FontWeight.w600,
-                                                          color: Colors.blue.shade700,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              if (hasPrescription)
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.purple.shade100,
-                                                    borderRadius: BorderRadius.circular(6),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Icon(Icons.medication, size: 12, color: Colors.purple.shade700),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        '${kunjungan['resep_obat'].length} Obat',
-                                                        style: TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight: FontWeight.w600,
-                                                          color: Colors.purple.shade700,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              if (payment != null)
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: payment['status'] == 'Sudah Bayar' 
-                                                        ? Colors.green.shade100 
-                                                        : Colors.orange.shade100,
-                                                    borderRadius: BorderRadius.circular(6),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Icon(
-                                                        payment['status'] == 'Sudah Bayar' 
-                                                            ? Icons.check_circle 
-                                                            : Icons.payment,
-                                                        size: 12,
-                                                        color: payment['status'] == 'Sudah Bayar' 
-                                                            ? Colors.green.shade700 
-                                                            : Colors.orange.shade700,
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        formatCurrency(payment['total_tagihan']),
-                                                        style: TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight: FontWeight.w600,
-                                                          color: payment['status'] == 'Sudah Bayar' 
-                                                              ? Colors.green.shade700 
-                                                              : Colors.orange.shade700,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ],
-
-                                        if (canCancel) ...[
-                                          const SizedBox(height: 12),
-                                          SizedBox(
-                                            width: double.infinity,
-                                            child: ElevatedButton(
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.red.shade500,
-                                                foregroundColor: Colors.white,
-                                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                elevation: 0,
-                                              ),
-                                              onPressed: () {
-                                                showDialog(
-                                                  context: context,
-                                                  builder: (context) => AlertDialog(
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(16),
-                                                    ),
-                                                    title: Row(
-                                                      children: [
-                                                        Container(
-                                                          padding: const EdgeInsets.all(8),
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.red.shade50,
-                                                            borderRadius: BorderRadius.circular(8),
-                                                          ),
-                                                          child: Icon(
-                                                            Icons.cancel,
-                                                            color: Colors.red.shade500,
-                                                            size: 24,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 12),
-                                                        const Text(
-                                                          'Batalkan Kunjungan',
-                                                          style: TextStyle(
-                                                            fontSize: 18,
-                                                            fontWeight: FontWeight.w600,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    content: Text(
-                                                      'Apakah Anda yakin ingin membatalkan kunjungan dengan Dr. ${dokter?['nama_dokter'] ?? 'Dokter'} pada ${formatDate(kunjungan['tanggal_kunjungan'] ?? '')}?',
-                                                      style: const TextStyle(fontSize: 14),
-                                                    ),
-                                                    actions: [
-                                                      Row(
-                                                        children: [
-                                                          Expanded(
-                                                            child: TextButton(
-                                                              onPressed: () => Navigator.pop(context),
-                                                              style: TextButton.styleFrom(
-                                                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                                                shape: RoundedRectangleBorder(
-                                                                  borderRadius: BorderRadius.circular(8),
-                                                                  side: BorderSide(color: Colors.grey.shade300),
-                                                                ),
-                                                              ),
-                                                              child: const Text(
-                                                                'Tidak',
-                                                                style: TextStyle(
-                                                                  fontSize: 15,
-                                                                  fontWeight: FontWeight.w600,
-                                                                  color: Colors.black87,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          const SizedBox(width: 12),
-                                                          Expanded(
-                                                            child: ElevatedButton(
-                                                              onPressed: () {
-                                                                Navigator.pop(context);
-                                                                batalkanKunjungan(kunjungan['id']);
-                                                              },
-                                                              style: ElevatedButton.styleFrom(
-                                                                backgroundColor: Colors.red.shade500,
-                                                                foregroundColor: Colors.white,
-                                                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                                                shape: RoundedRectangleBorder(
-                                                                  borderRadius: BorderRadius.circular(8),
-                                                                ),
-                                                                elevation: 0,
-                                                              ),
-                                                              child: const Text(
-                                                                'Ya, Batalkan',
-                                                                style: TextStyle(
-                                                                  fontSize: 15,
-                                                                  fontWeight: FontWeight.w600,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                              child: const Row(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(Icons.cancel, size: 18),
-                                                  SizedBox(width: 8),
-                                                  Text(
-                                                    'Batalkan Kunjungan',
-                                                    style: TextStyle(
-                                                      fontSize: 15,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }
@@ -1624,11 +1772,7 @@ class DetailRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            size: isCompact ? 16 : 18,
-            color: const Color(0xFF00897B),
-          ),
+          Icon(icon, size: isCompact ? 16 : 18, color: const Color(0xFF00897B)),
           const SizedBox(width: 8),
           Expanded(
             child: Column(

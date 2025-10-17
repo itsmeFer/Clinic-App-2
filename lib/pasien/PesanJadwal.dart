@@ -1,27 +1,26 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:RoyalClinic/pasien/edit_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'RiwayatKunjungan.dart';
+import 'package:intl/intl.dart'; // Tambahkan import ini untuk format tanggal
 
 class PesanJadwal extends StatefulWidget {
   final List<dynamic>? allJadwal;
   final int? poliId;
   final String? namaPoli;
 
-  const PesanJadwal({
-    Key? key,
-    this.allJadwal,
-    this.poliId,
-    this.namaPoli,
-  }) : super(key: key);
+  const PesanJadwal({Key? key, this.allJadwal, this.poliId, this.namaPoli})
+    : super(key: key);
 
   @override
   State<PesanJadwal> createState() => _PesanJadwalState();
 }
 
-class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin {
+class _PesanJadwalState extends State<PesanJadwal>
+    with TickerProviderStateMixin {
   bool isLoading = false;
   bool isLoadingPoli = false;
   List<dynamic> poliList = [];
@@ -29,18 +28,18 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
   List<dynamic> filteredDokter = [];
   List<dynamic> searchFilteredDokter = [];
   int? selectedPoliId;
-  
+
   // Search controllers and animations
   final TextEditingController _searchController = TextEditingController();
   bool isSearchActive = false;
   bool isTyping = false;
-  
+
   // Animation controllers
   late AnimationController _searchAnimationController;
   late AnimationController _typingTextController;
   late Animation<double> _scaleAnimation;
   late Animation<Color?> _colorAnimation;
-  
+
   // Typing animation variables
   int _currentIndex = 0;
   String _currentText = '';
@@ -49,7 +48,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
   final String _fullText = 'Cari nama dokter atau poli...';
 
   Map<int, TextEditingController> keluhanControllers = {};
-  Map<int, String?> selectedJadwal = {};
+  Map<int, Map<String, dynamic>?> selectedJadwal = {};
   Map<int, bool> expandedDokter = {};
 
   @override
@@ -62,21 +61,20 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    
+
     _typingTextController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
 
     // Setup animations
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.05,
-    ).animate(CurvedAnimation(
-      parent: _searchAnimationController,
-      curve: Curves.elasticOut,
-    ));
-    
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(
+        parent: _searchAnimationController,
+        curve: Curves.elasticOut,
+      ),
+    );
+
     _colorAnimation = ColorTween(
       begin: Colors.grey.shade500,
       end: const Color(0xFF00897B),
@@ -84,7 +82,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
 
     // Start typing text animation
     _startTypingAnimation();
-    
+
     // Start cursor blink animation
     _typingTextController.repeat(reverse: true);
 
@@ -107,14 +105,14 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
       }
       fetchPoli();
     }
-    
+
     _searchController.addListener(_onSearchChanged);
   }
 
   void _startTypingAnimation() {
     _typingTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (!mounted) return;
-      
+
       if (_searchController.text.isEmpty && !isSearchActive) {
         setState(() {
           if (_currentText.length < _fullText.length) {
@@ -127,7 +125,9 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
               });
               timer.cancel();
               Timer(const Duration(milliseconds: 500), () {
-                if (mounted && _searchController.text.isEmpty && !isSearchActive) {
+                if (mounted &&
+                    _searchController.text.isEmpty &&
+                    !isSearchActive) {
                   _startTypingAnimation();
                 }
               });
@@ -159,7 +159,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
       isTyping = _searchController.text.isNotEmpty;
       isSearchActive = _searchController.text.isNotEmpty;
     });
-    
+
     if (_searchController.text.isNotEmpty) {
       _searchAnimationController.forward();
     } else {
@@ -171,27 +171,28 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
         }
       });
     }
-    
+
     _performSearch(_searchController.text);
   }
 
   void _performSearch(String query) {
     setState(() {
       isSearchActive = query.isNotEmpty;
-      
+
       if (query.isEmpty) {
         searchFilteredDokter = filteredDokter;
       } else {
         final lowercaseQuery = query.toLowerCase();
-        
+
         searchFilteredDokter = filteredDokter.where((dokter) {
           // Search by doctor name
           final dokterName = (dokter['nama_dokter'] ?? '').toLowerCase();
-          
+
           // Search by poli name
           final poliName = (dokter['poli']?['nama_poli'] ?? '').toLowerCase();
-          
-          return dokterName.contains(lowercaseQuery) || poliName.contains(lowercaseQuery);
+
+          return dokterName.contains(lowercaseQuery) ||
+              poliName.contains(lowercaseQuery);
         }).toList();
       }
     });
@@ -204,7 +205,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
 
     try {
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getDataPoli'),
+        Uri.parse('http://10.227.74.71:8000/api/getDataPoli'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -236,7 +237,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
 
     try {
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getAllDokter'),
+        Uri.parse('http://10.227.74.71:8000/api/getAllDokter'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -294,9 +295,9 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
     } catch (e) {
       if (mounted) {
         setState(() => isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Kesalahan koneksi: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Kesalahan koneksi: $e')));
       }
     }
   }
@@ -332,58 +333,149 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
     return prefs.getString('token');
   }
 
-  String formatJadwalDropdown(Map<String, dynamic> jadwal) {
-    return "${jadwal['hari']} (${jadwal['jam_awal']} - ${jadwal['jam_selesai']})";
+  // FUNGSI BARU: Mengonversi hari Indonesia ke nomor hari
+  int getHariNumber(String hari) {
+    final hariMapping = {
+      'Senin': 1,
+      'Selasa': 2,
+      'Rabu': 3,
+      'Kamis': 4,
+      'Jumat': 5,
+      'Sabtu': 6,
+      'Minggu': 0,
+    };
+    return hariMapping[hari] ?? 1;
   }
 
-  Map<String, dynamic>? getSelectedJadwalData(int dokterId, String selectedValue) {
-    final dokter = searchFilteredDokter.firstWhere(
-      (d) => (d['id_dokter'] ?? d['id']) == dokterId,
-      orElse: () => null,
-    );
-    
-    if (dokter == null) return null;
+DateTime getNextDateByDay(
+  int dayOfWeek, {
+  String? jamAwal,
+  String? jamSelesai,
+}) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
 
-    final jadwalList = dokter['jadwal'] as List<dynamic>?;
-    if (jadwalList == null) return null;
+  int daysUntilTarget = (dayOfWeek - today.weekday) % 7;
 
-    for (var jadwal in jadwalList) {
-      if (formatJadwalDropdown(jadwal) == selectedValue) {
-        return jadwal;
+  // Jika hari yang sama (daysUntilTarget == 0)
+  if (daysUntilTarget == 0) {
+    // Jika ada info jam praktik, cek apakah masih dalam jam kerja
+    if (jamAwal != null && jamSelesai != null) {
+      if (_isWithinWorkingHours(now, jamAwal, jamSelesai)) {
+        // ✅ PERBAIKAN: Masih dalam jam kerja, gunakan hari ini
+        return today;
+      } else {
+        // ✅ PERBAIKAN: Sudah lewat jam kerja, loncat ke minggu depan
+        daysUntilTarget = 7;
+      }
+    } else {
+      // ✅ PERBAIKAN: Jika tidak ada info jam dan masih siang (sebelum jam 17:00), 
+      // gunakan hari ini. Jika sudah sore, gunakan minggu depan
+      if (now.hour < 17) {
+        return today;
+      } else {
+        daysUntilTarget = 7;
       }
     }
-    return null;
+  }
+
+  return today.add(Duration(days: daysUntilTarget));
+}
+
+// Helper function untuk cek jam kerja
+bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
+  try {
+    // Parse jam awal (contoh: "08:00")
+    final awalParts = jamAwal.split(':');
+    final jamAwalInt = int.parse(awalParts[0]);
+    final menitAwalInt = int.parse(awalParts[1]);
+
+    // Parse jam selesai (contoh: "16:00")
+    final selesaiParts = jamSelesai.split(':');
+    final jamSelesaiInt = int.parse(selesaiParts[0]);
+    final menitSelesaiInt = int.parse(selesaiParts[1]);
+
+    // Waktu sekarang dalam menit sejak tengah malam
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    // Jam kerja dalam menit sejak tengah malam
+    final startMinutes = jamAwalInt * 60 + menitAwalInt;
+    final endMinutes = jamSelesaiInt * 60 + menitSelesaiInt;
+
+    // ✅ PERBAIKAN: Beri toleransi 30 menit sebelum jam tutup untuk booking
+    final bookingCutoffMinutes = endMinutes - 30;
+
+    // Cek apakah masih dalam rentang waktu untuk booking
+    return nowMinutes >= startMinutes && nowMinutes <= bookingCutoffMinutes;
+  } catch (e) {
+    print('Error parsing working hours: $e');
+    // ✅ PERBAIKAN: Jika error parsing, cek berdasarkan jam sekarang
+    // Jam 8 pagi sampai 4 sore adalah jam kerja default
+    return now.hour >= 8 && now.hour < 16;
+  }
+}
+
+  // FUNGSI BARU: Format tanggal dalam bahasa Indonesia
+  String formatTanggalIndonesia(DateTime date) {
+    final bulanIndonesia = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Ags',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
+
+    return '${date.day} ${bulanIndonesia[date.month - 1]} ${date.year}';
+  }
+
+  // FUNGSI BARU: Format jadwal dengan hari dan tanggal
+  // PERBAIKAN - pass jam kerja
+  String formatJadwalDropdown(Map<String, dynamic> jadwal) {
+    final hari = jadwal['hari'];
+    final jamAwal = jadwal['jam_awal'];
+    final jamSelesai = jadwal['jam_selesai'];
+
+    final hariNumber = getHariNumber(hari);
+    final tanggalTerdekat = getNextDateByDay(
+      hariNumber,
+      jamAwal: jamAwal,
+      jamSelesai: jamSelesai,
+    );
+    final tanggalFormatted = formatTanggalIndonesia(tanggalTerdekat);
+
+    return "$hari, $tanggalFormatted ($jamAwal - $jamSelesai)";
   }
 
   Future<void> pesanSekarang(int dokterId) async {
   final pasienId = await getPasienId();
   final token = await getToken();
   final keluhan = keluhanControllers[dokterId]?.text.trim() ?? '';
-  final selectedValue = selectedJadwal[dokterId];
+  final selectedJadwalData = selectedJadwal[dokterId];
 
   if (pasienId == null || token == null) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data pasien atau token tidak ditemukan')),
+        const SnackBar(
+          content: Text('Data pasien atau token tidak ditemukan'),
+        ),
       );
     }
     return;
   }
 
-  if (keluhan.isEmpty || selectedValue == null) {
+  if (keluhan.isEmpty || selectedJadwalData == null) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih jadwal dan isi keluhan terlebih dahulu')),
-      );
-    }
-    return;
-  }
-
-  final jadwalData = getSelectedJadwalData(dokterId, selectedValue);
-  if (jadwalData == null) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Jadwal yang dipilih tidak valid')),
+        const SnackBar(
+          content: Text('Pilih jadwal dan isi keluhan terlebih dahulu'),
+        ),
       );
     }
     return;
@@ -414,22 +506,38 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
     return;
   }
 
+  // ✅ PERBAIKAN: Hitung tanggal yang benar berdasarkan jadwal yang dipilih
+  final hari = selectedJadwalData['hari'];
+  final jamAwal = selectedJadwalData['jam_awal'];
+  final jamSelesai = selectedJadwalData['jam_selesai'];
+  
+  final hariNumber = getHariNumber(hari);
+  final tanggalKunjungan = getNextDateByDay(
+    hariNumber,
+    jamAwal: jamAwal,
+    jamSelesai: jamSelesai,
+  );
+  
+  // Format tanggal untuk dikirim ke backend (YYYY-MM-DD)
+  final tanggalKunjunganString = 
+      '${tanggalKunjungan.year}-${tanggalKunjungan.month.toString().padLeft(2, '0')}-${tanggalKunjungan.day.toString().padLeft(2, '0')}';
+
   if (mounted) {
     setState(() => isLoading = true);
   }
 
   try {
     final response = await http.post(
-      Uri.parse('https://admin.royal-klinik.cloud/api/kunjungan/create'),
+      Uri.parse('http://10.227.74.71:8000/api/kunjungan/create'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
         'pasien_id': pasienId,
-        'dokter_id': dokterId,  // Tetap kirim dokter_id untuk referensi
-        'poli_id': poliId,      // Tambahkan poli_id yang dibutuhkan backend
-        'tanggal_kunjungan': DateTime.now().toIso8601String().split('T')[0],
+        'dokter_id': dokterId,
+        'poli_id': poliId,
+        'tanggal_kunjungan': tanggalKunjunganString, // ✅ Menggunakan tanggal yang benar
         'keluhan_awal': keluhan,
       }),
     );
@@ -446,9 +554,9 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Berhasil memesan dengan $dokterNama, No Antrian: ${data['Data No Antrian'] ?? '-'}',
+              'Berhasil memesan dengan $dokterNama untuk tanggal $tanggalKunjunganString, No Antrian: ${data['Data No Antrian'] ?? '-'}',
             ),
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -457,10 +565,15 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const RiwayatKunjungan(),
-          ),
+          MaterialPageRoute(builder: (context) => const RiwayatKunjungan()),
         );
+      }
+    }
+    // Handle error responses...
+    else if (response.statusCode == 422 &&
+        data['error_code'] == 'PROFILE_INCOMPLETE') {
+      if (mounted) {
+        _showProfileIncompleteDialog();
       }
     } else {
       if (mounted) {
@@ -471,7 +584,9 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
     }
   } catch (e) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kesalahan koneksi: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Kesalahan koneksi: $e')));
     }
   } finally {
     if (mounted) {
@@ -479,6 +594,69 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
     }
   }
 }
+
+  // Tambahkan method untuk dialog profil tidak lengkap
+  void _showProfileIncompleteDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.person_outline,
+                color: Colors.orange.shade600,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Profil Belum Lengkap',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Mohon lengkapi data profil Anda terlebih dahulu sebelum membuat janji dengan dokter.\n\nData yang harus diisi:\n• Nama lengkap\n• Alamat\n• Tanggal lahir\n• Jenis kelamin',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Tutup dialog
+              },
+              child: Text(
+                'Nanti',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00897B),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {
+                  Navigator.pop(context, MaterialPageRoute(builder: (context) => EditProfilePage(),));
+              },
+              child: const Text(
+                'Lengkapi Profil',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -521,31 +699,48 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                                     color: Colors.grey.shade100,
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: isSearchActive 
-                                          ? const Color(0xFF00897B) 
+                                      color: isSearchActive
+                                          ? const Color(0xFF00897B)
                                           : Colors.transparent,
                                       width: isSearchActive ? 2 : 1,
                                     ),
-                                    boxShadow: isSearchActive ? [
-                                      BoxShadow(
-                                        color: const Color(0xFF00897B).withOpacity(0.15),
-                                        blurRadius: 10,
-                                        spreadRadius: 1,
-                                      ),
-                                    ] : [],
+                                    boxShadow: isSearchActive
+                                        ? [
+                                            BoxShadow(
+                                              color: const Color(
+                                                0xFF00897B,
+                                              ).withOpacity(0.15),
+                                              blurRadius: 10,
+                                              spreadRadius: 1,
+                                            ),
+                                          ]
+                                        : [],
                                   ),
                                   child: TextField(
                                     controller: _searchController,
                                     decoration: InputDecoration(
-                                      hintText: _searchController.text.isEmpty && !isSearchActive 
-                                          ? _currentText + (_showCursor && _currentText.length < _fullText.length ? '|' : '')
+                                      hintText:
+                                          _searchController.text.isEmpty &&
+                                              !isSearchActive
+                                          ? _currentText +
+                                                (_showCursor &&
+                                                        _currentText.length <
+                                                            _fullText.length
+                                                    ? '|'
+                                                    : '')
                                           : 'Ketik untuk mencari...',
                                       hintStyle: TextStyle(
-                                        color: _searchController.text.isEmpty && !isSearchActive
-                                            ? const Color(0xFF00897B).withOpacity(0.7)
+                                        color:
+                                            _searchController.text.isEmpty &&
+                                                !isSearchActive
+                                            ? const Color(
+                                                0xFF00897B,
+                                              ).withOpacity(0.7)
                                             : Colors.grey.shade500,
                                         fontSize: 14,
-                                        fontWeight: _searchController.text.isEmpty && !isSearchActive
+                                        fontWeight:
+                                            _searchController.text.isEmpty &&
+                                                !isSearchActive
                                             ? FontWeight.w500
                                             : FontWeight.normal,
                                       ),
@@ -556,8 +751,11 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                                             animation: _colorAnimation,
                                             builder: (context, child) {
                                               return Transform.scale(
-                                                scale: isSearchActive 
-                                                    ? 1.0 + (_typingTextController.value * 0.1)
+                                                scale: isSearchActive
+                                                    ? 1.0 +
+                                                          (_typingTextController
+                                                                  .value *
+                                                              0.1)
                                                     : 1.0,
                                                 child: Icon(
                                                   Icons.search,
@@ -572,10 +770,14 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                                       suffixIcon: isSearchActive
                                           ? AnimatedScale(
                                               scale: isSearchActive ? 1.0 : 0.0,
-                                              duration: const Duration(milliseconds: 200),
+                                              duration: const Duration(
+                                                milliseconds: 200,
+                                              ),
                                               child: IconButton(
                                                 icon: Container(
-                                                  padding: const EdgeInsets.all(4),
+                                                  padding: const EdgeInsets.all(
+                                                    4,
+                                                  ),
                                                   decoration: BoxDecoration(
                                                     color: Colors.grey.shade300,
                                                     shape: BoxShape.circle,
@@ -591,10 +793,11 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                                             )
                                           : null,
                                       border: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 12,
-                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 12,
+                                          ),
                                     ),
                                     style: const TextStyle(fontSize: 14),
                                   ),
@@ -605,7 +808,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                         );
                       },
                     ),
-                    
+
                     // Search Results Info with animation
                     if (isSearchActive) ...[
                       const SizedBox(height: 12),
@@ -616,7 +819,10 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                           opacity: isSearchActive ? 1.0 : 0.0,
                           duration: const Duration(milliseconds: 300),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
@@ -666,12 +872,18 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                                     style: TextButton.styleFrom(
                                       padding: EdgeInsets.zero,
                                       minimumSize: const Size(50, 30),
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF00897B).withOpacity(0.1),
+                                        color: const Color(
+                                          0xFF00897B,
+                                        ).withOpacity(0.1),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: const Text(
@@ -694,7 +906,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                   ],
                 ),
               ),
-              
+
               // Filter Poli (hanya tampil jika tidak ada pencarian aktif)
               if (!isSearchActive && widget.poliId == null) ...[
                 Container(
@@ -747,26 +959,30 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                                 ),
                               ),
                               // Chip untuk setiap poli
-                              ...poliList.map((poli) => Padding(
-                                    padding: const EdgeInsets.only(right: 8),
-                                    child: ChoiceChip(
-                                      label: Text(poli['nama_poli']),
-                                      selected: selectedPoliId == poli['id'],
-                                      onSelected: (selected) {
-                                        if (selected) {
-                                          filterByPoli(poli['id']);
-                                        }
-                                      },
-                                      selectedColor: const Color(0xFF00897B),
-                                      backgroundColor: Colors.grey.shade100,
-                                      labelStyle: TextStyle(
-                                        color: selectedPoliId == poli['id']
-                                            ? Colors.white
-                                            : Colors.black87,
-                                        fontWeight: FontWeight.w500,
+                              ...poliList
+                                  .map(
+                                    (poli) => Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: ChoiceChip(
+                                        label: Text(poli['nama_poli']),
+                                        selected: selectedPoliId == poli['id'],
+                                        onSelected: (selected) {
+                                          if (selected) {
+                                            filterByPoli(poli['id']);
+                                          }
+                                        },
+                                        selectedColor: const Color(0xFF00897B),
+                                        backgroundColor: Colors.grey.shade100,
+                                        labelStyle: TextStyle(
+                                          color: selectedPoliId == poli['id']
+                                              ? Colors.white
+                                              : Colors.black87,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
-                                  )).toList(),
+                                  )
+                                  .toList(),
                             ],
                           ),
                         ),
@@ -776,10 +992,14 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
               ],
 
               // Info Filter Aktif
-              if (!isSearchActive && (selectedPoliId != null || widget.namaPoli != null)) ...[
+              if (!isSearchActive &&
+                  (selectedPoliId != null || widget.namaPoli != null)) ...[
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   color: const Color(0xFF00897B).withOpacity(0.1),
                   child: Row(
                     children: [
@@ -826,23 +1046,23 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
               Expanded(
                 child: Builder(
                   builder: (context) {
-                    print('Building ListView with ${searchFilteredDokter.length} doctors');
-                    
+                    print(
+                      'Building ListView with ${searchFilteredDokter.length} doctors',
+                    );
+
                     if (isLoading) {
                       return const Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            CircularProgressIndicator(
-                              color: Color(0xFF00897B),
-                            ),
+                            CircularProgressIndicator(color: Color(0xFF00897B)),
                             SizedBox(height: 16),
                             Text('Memuat data dokter...'),
                           ],
                         ),
                       );
                     }
-                    
+
                     if (searchFilteredDokter.isEmpty) {
                       return Center(
                         child: Column(
@@ -858,8 +1078,8 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                               isSearchActive
                                   ? 'Tidak ditemukan dokter dengan kata kunci "${_searchController.text}"'
                                   : selectedPoliId != null
-                                      ? 'Tidak ada dokter dengan poli ini'
-                                      : 'Tidak ada dokter tersedia',
+                                  ? 'Tidak ada dokter dengan poli ini'
+                                  : 'Tidak ada dokter tersedia',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 16,
@@ -885,328 +1105,587 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                     }
 
                     return ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: searchFilteredDokter.length,
-                        itemBuilder: (context, index) {
-                          print('Building item $index');
-                          final dokter = searchFilteredDokter[index];
-                          final dokterId = dokter['id_dokter'] ?? dokter['id'];
-                          final jadwalList = dokter['jadwal'] as List<dynamic>? ?? [];
+                      padding: const EdgeInsets.all(16),
+                      itemCount: searchFilteredDokter.length,
+                      itemBuilder: (context, index) {
+                        print('Building item $index');
+                        final dokter = searchFilteredDokter[index];
+                        final dokterId = dokter['id_dokter'] ?? dokter['id'];
+                        final jadwalList =
+                            dokter['jadwal'] as List<dynamic>? ?? [];
 
-                          print('Doctor: ${dokter['nama_dokter']}, ID: $dokterId, Jadwal count: ${jadwalList.length}');
+                        print(
+                          'Doctor: ${dokter['nama_dokter']}, ID: $dokterId, Jadwal count: ${jadwalList.length}',
+                        );
 
-                          // Skip this item if dokterId is still null
-                          if (dokterId == null) {
-                            print('Skipping doctor due to null ID');
-                            return const SizedBox.shrink();
-                          }
+                        // Skip this item if dokterId is still null
+                        if (dokterId == null) {
+                          print('Skipping doctor due to null ID');
+                          return const SizedBox.shrink();
+                        }
 
-                          keluhanControllers.putIfAbsent(dokterId, () => TextEditingController());
+                        keluhanControllers.putIfAbsent(
+                          dokterId,
+                          () => TextEditingController(),
+                        );
 
-                          final dropdownItems = jadwalList.map((jadwal) {
-                            final displayText = formatJadwalDropdown(jadwal);
-                            return DropdownMenuItem<String>(
-                              value: displayText,
-                              child: Text(displayText),
-                            );
-                          }).toList();
-
-                          if (selectedJadwal[dokterId] != null) {
-                            final isValidSelection = dropdownItems.any(
-                                (item) => item.value == selectedJadwal[dokterId]);
-                            if (!isValidSelection) {
-                              selectedJadwal[dokterId] = null;
-                            }
-                          }
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Header Dokter - Always visible
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 70,
-                                        height: 70,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF00897B).withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(12),
-                                          child: dokter['foto_dokter'] != null
-                                              ? Image.network(
-                                                  'https://admin.royal-klinik.cloud/storage/${dokter['foto_dokter']}',
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (context, error, stackTrace) {
-                                                    return const Icon(
-                                                      Icons.person,
-                                                      size: 40,
-                                                      color: Color(0xFF00897B),
-                                                    );
-                                                  },
-                                                )
-                                              : const Icon(
-                                                  Icons.person,
-                                                  size: 40,
-                                                  color: Color(0xFF00897B),
-                                                ),
-                                        ),
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Header Dokter - Always visible
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 70,
+                                      height: 70,
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFF00897B,
+                                        ).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              dokter['nama_dokter'] ?? 'Nama tidak tersedia',
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: dokter['foto_dokter'] != null
+                                            ? Image.network(
+                                                'http://10.227.74.71:8000/storage/${dokter['foto_dokter']}',
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return const Icon(
+                                                        Icons.person,
+                                                        size: 40,
+                                                        color: Color(
+                                                          0xFF00897B,
+                                                        ),
+                                                      );
+                                                    },
+                                              )
+                                            : const Icon(
+                                                Icons.person,
+                                                size: 40,
+                                                color: Color(0xFF00897B),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            dokter['nama_dokter'] ??
+                                                'Nama tidak tersedia',
+                                            style: const TextStyle(
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.black87,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(
+                                                0xFF00897B,
+                                              ).withOpacity(0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              dokter['poli']?['nama_poli'] ??
+                                                  'Poli Umum',
                                               style: const TextStyle(
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black87,
+                                                color: Color(0xFF00897B),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
                                               ),
                                             ),
-                                            const SizedBox(height: 6),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 5,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // Toggle Button - Lihat Semua / Sembunyikan
+                                Center(
+                                  child: TextButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        expandedDokter[dokterId] =
+                                            !(expandedDokter[dokterId] ??
+                                                false);
+                                      });
+                                    },
+                                    icon: AnimatedRotation(
+                                      turns: expandedDokter[dokterId] == true
+                                          ? 0.5
+                                          : 0.0,
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      child: Icon(
+                                        Icons.keyboard_arrow_down,
+                                        color: const Color(0xFF00897B),
+                                      ),
+                                    ),
+                                    label: Text(
+                                      expandedDokter[dokterId] == true
+                                          ? 'Sembunyikan Detail'
+                                          : 'Lihat Semua Detail',
+                                      style: const TextStyle(
+                                        color: Color(0xFF00897B),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                // Expanded Details
+                                if (expandedDokter[dokterId] == true) ...[
+                                  const SizedBox(height: 16),
+
+                                  // Info Dokter
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        _buildInfoRow(
+                                          Icons.phone,
+                                          'No. HP',
+                                          dokter['no_hp'] ?? '-',
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 16),
+
+                                  // UPDATED: Jadwal Tersedia dengan Klik Langsung
+                                  const Text(
+                                    'Jadwal Tersedia - Pilih Salah Satu',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (jadwalList.isEmpty)
+                                    const Text(
+                                      'Tidak ada jadwal tersedia',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey,
+                                      ),
+                                    )
+                                  else
+                                    ...jadwalList.map((jadwal) {
+                                      final hari = jadwal['hari'];
+                                      final jamAwal = jadwal['jam_awal'];
+                                      final jamSelesai = jadwal['jam_selesai'];
+
+                                      print(
+                                        'DEBUG jadwal: $hari, $jamAwal - $jamSelesai',
+                                      );
+
+                                      final hariNumber = getHariNumber(hari);
+
+                                      // Pass jam kerja spesifik jadwal ini
+                                      final tanggalTerdekat = getNextDateByDay(
+                                        hariNumber,
+                                        jamAwal: jamAwal,
+                                        jamSelesai: jamSelesai,
+                                      );
+
+                                      final tanggalFormatted =
+                                          formatTanggalIndonesia(
+                                            tanggalTerdekat,
+                                          );
+
+                                      // ... rest of UI code
+
+                                      final isSelected =
+                                          selectedJadwal[dokterId] == jadwal;
+
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 4,
+                                        ),
+                                        child: InkWell(
+                                          onTap: () {
+                                            setState(() {
+                                              selectedJadwal[dokterId] = jadwal;
+                                            });
+                                          },
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 200,
+                                            ),
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: isSelected
+                                                  ? const Color(
+                                                      0xFF00897B,
+                                                    ).withOpacity(0.15)
+                                                  : const Color(
+                                                      0xFF00897B,
+                                                    ).withOpacity(0.05),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? const Color(0xFF00897B)
+                                                    : const Color(
+                                                        0xFF00897B,
+                                                      ).withOpacity(0.2),
+                                                width: isSelected ? 2 : 1,
                                               ),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF00897B).withOpacity(0.1),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                dokter['poli']?['nama_poli'] ??
-                                                    'Poli Umum',
-                                                style: const TextStyle(
-                                                  color: Color(0xFF00897B),
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                AnimatedContainer(
+                                                  duration: const Duration(
+                                                    milliseconds: 200,
+                                                  ),
+                                                  width: 8,
+                                                  height: 8,
+                                                  decoration: BoxDecoration(
+                                                    color: isSelected
+                                                        ? const Color(
+                                                            0xFF00897B,
+                                                          )
+                                                        : const Color(
+                                                            0xFF00897B,
+                                                          ).withOpacity(0.5),
+                                                    shape: BoxShape.circle,
+                                                  ),
                                                 ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Row(
+                                                        children: [
+                                                          Icon(
+                                                            Icons
+                                                                .calendar_today,
+                                                            size: 16,
+                                                            color: isSelected
+                                                                ? const Color(
+                                                                    0xFF00897B,
+                                                                  )
+                                                                : const Color(
+                                                                    0xFF00897B,
+                                                                  ).withOpacity(
+                                                                    0.7,
+                                                                  ),
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 6,
+                                                          ),
+                                                          Text(
+                                                            '$hari, $tanggalFormatted',
+                                                            style: TextStyle(
+                                                              fontSize: 14,
+                                                              fontWeight:
+                                                                  isSelected
+                                                                  ? FontWeight
+                                                                        .w700
+                                                                  : FontWeight
+                                                                        .w600,
+                                                              color: isSelected
+                                                                  ? const Color(
+                                                                      0xFF00897B,
+                                                                    )
+                                                                  : const Color(
+                                                                      0xFF00897B,
+                                                                    ).withOpacity(
+                                                                      0.8,
+                                                                    ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Row(
+                                                        children: [
+                                                          Icon(
+                                                            Icons.access_time,
+                                                            size: 16,
+                                                            color: isSelected
+                                                                ? Colors
+                                                                      .grey
+                                                                      .shade700
+                                                                : Colors
+                                                                      .grey
+                                                                      .shade600,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 6,
+                                                          ),
+                                                          Text(
+                                                            '${jadwal['jam_awal']} - ${jadwal['jam_selesai']}',
+                                                            style: TextStyle(
+                                                              fontSize: 13,
+                                                              fontWeight:
+                                                                  isSelected
+                                                                  ? FontWeight
+                                                                        .w500
+                                                                  : FontWeight
+                                                                        .normal,
+                                                              color: isSelected
+                                                                  ? Colors
+                                                                        .grey
+                                                                        .shade700
+                                                                  : Colors
+                                                                        .grey
+                                                                        .shade600,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                if (isSelected)
+                                                  AnimatedScale(
+                                                    scale: isSelected
+                                                        ? 1.0
+                                                        : 0.0,
+                                                    duration: const Duration(
+                                                      milliseconds: 200,
+                                                    ),
+                                                    child: Container(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            4,
+                                                          ),
+                                                      decoration:
+                                                          const BoxDecoration(
+                                                            color: Color(
+                                                              0xFF00897B,
+                                                            ),
+                                                            shape:
+                                                                BoxShape.circle,
+                                                          ),
+                                                      child: const Icon(
+                                                        Icons.check,
+                                                        color: Colors.white,
+                                                        size: 14,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+
+                                  if (jadwalList.isNotEmpty) ...[
+                                    const SizedBox(height: 16),
+
+                                    // Jadwal yang dipilih
+                                    if (selectedJadwal[dokterId] != null) ...[
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              const Color(
+                                                0xFF00897B,
+                                              ).withOpacity(0.1),
+                                              const Color(
+                                                0xFF4CAF50,
+                                              ).withOpacity(0.05),
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(
+                                              0xFF00897B,
+                                            ).withOpacity(0.3),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: const BoxDecoration(
+                                                color: Color(0xFF00897B),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.event_available,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text(
+                                                    'Jadwal Terpilih:',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Color(0xFF00897B),
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    formatJadwalDropdown(
+                                                      selectedJadwal[dokterId]!,
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      color: Color(0xFF00897B),
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ],
                                         ),
                                       ),
+                                      const SizedBox(height: 16),
                                     ],
-                                  ),
-                                  
-                                  const SizedBox(height: 16),
 
-                                  // Toggle Button - Lihat Semua / Sembunyikan
-                                  Center(
-                                    child: TextButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          expandedDokter[dokterId] = !(expandedDokter[dokterId] ?? false);
-                                        });
-                                      },
-                                      icon: AnimatedRotation(
-                                        turns: expandedDokter[dokterId] == true ? 0.5 : 0.0,
-                                        duration: const Duration(milliseconds: 200),
-                                        child: Icon(
-                                          Icons.keyboard_arrow_down,
-                                          color: const Color(0xFF00897B),
-                                        ),
-                                      ),
-                                      label: Text(
-                                        expandedDokter[dokterId] == true 
-                                            ? 'Sembunyikan Detail' 
-                                            : 'Lihat Semua Detail',
-                                        style: const TextStyle(
-                                          color: Color(0xFF00897B),
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  // Expanded Details
-                                  if (expandedDokter[dokterId] == true) ...[
-                                    const SizedBox(height: 16),
-
-                                    // Info Dokter
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade50,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          _buildInfoRow(
-                                            Icons.phone,
-                                            'No. HP',
-                                            dokter['no_hp'] ?? '-',
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    const SizedBox(height: 16),
-
-                                    // Jadwal Tersedia
+                                    // Keluhan
                                     const Text(
-                                      'Jadwal Tersedia',
+                                      'Keluhan Awal',
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w600,
                                         color: Colors.black87,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
-                                    if (jadwalList.isEmpty)
-                                      const Text(
-                                        'Tidak ada jadwal tersedia',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey,
+                                    TextField(
+                                      controller: keluhanControllers[dokterId],
+                                      decoration: InputDecoration(
+                                        hintText: 'Jelaskan keluhan Anda...',
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: Colors.grey.shade300,
+                                          ),
                                         ),
-                                      )
-                                    else
-                                      ...jadwalList.map((jadwal) => Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 4),
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  width: 4,
-                                                  height: 4,
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFF00897B),
-                                                    borderRadius: BorderRadius.circular(2),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    '${jadwal['hari']}: ${jadwal['jam_awal']} - ${jadwal['jam_selesai']}',
-                                                    style: TextStyle(
-                                                      fontSize: 13,
-                                                      color: Colors.grey.shade700,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          )).toList(),
-
-                                    if (jadwalList.isNotEmpty) ...[
-                                      const SizedBox(height: 16),
-
-                                      // Pilih Jadwal
-                                      const Text(
-                                        'Pilih Jadwal',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black87,
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          borderSide: const BorderSide(
+                                            color: Color(0xFF00897B),
+                                          ),
+                                        ),
+                                        contentPadding: const EdgeInsets.all(
+                                          12,
                                         ),
                                       ),
-                                      const SizedBox(height: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(color: Colors.grey.shade300),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: DropdownButton<String>(
-                                          isExpanded: true,
-                                          underline: const SizedBox(),
-                                          hint: const Text('Pilih jadwal yang tersedia'),
-                                          value: selectedJadwal[dokterId],
-                                          items: dropdownItems,
-                                          onChanged: (value) {
-                                            setState(() {
-                                              selectedJadwal[dokterId] = value;
-                                            });
-                                          },
-                                        ),
-                                      ),
+                                      maxLines: 3,
+                                    ),
 
-                                      const SizedBox(height: 16),
+                                    const SizedBox(height: 16),
 
-                                      // Keluhan
-                                      const Text(
-                                        'Keluhan Awal',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      TextField(
-                                        controller: keluhanControllers[dokterId],
-                                        decoration: InputDecoration(
-                                          hintText: 'Jelaskan keluhan Anda...',
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(8),
-                                            borderSide: BorderSide(color: Colors.grey.shade300),
+                                    // Button Pesan
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(
+                                            0xFF00897B,
                                           ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(8),
-                                            borderSide: BorderSide(color: Colors.grey.shade300),
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 14,
                                           ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(8),
-                                            borderSide: const BorderSide(color: Color(0xFF00897B)),
-                                          ),
-                                          contentPadding: const EdgeInsets.all(12),
-                                        ),
-                                        maxLines: 3,
-                                      ),
-
-                                      const SizedBox(height: 16),
-
-                                      // Button Pesan
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFF00897B),
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 14),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            elevation: 0,
-                                          ),
-                                          onPressed: isLoading || selectedJadwal[dokterId] == null
-                                              ? null
-                                              : () => pesanSekarang(dokterId),
-                                          child: const Text(
-                                            'Pesan Sekarang',
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w600,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
                                             ),
                                           ),
+                                          elevation: 0,
+                                        ),
+                                        onPressed:
+                                            isLoading ||
+                                                selectedJadwal[dokterId] == null
+                                            ? null
+                                            : () => pesanSekarang(dokterId),
+                                        child: const Text(
+                                          'Pesan Sekarang',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ],
                                 ],
-                              ),
+                              ],
                             ),
-                          );
-                        });
-                  }),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -1225,9 +1704,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
                   child: const Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(
-                        color: Color(0xFF00897B),
-                      ),
+                      CircularProgressIndicator(color: Color(0xFF00897B)),
                       SizedBox(height: 16),
                       Text(
                         'Memproses pesanan...',
@@ -1250,11 +1727,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 18,
-          color: const Color(0xFF00897B),
-        ),
+        Icon(icon, size: 18, color: const Color(0xFF00897B)),
         const SizedBox(width: 8),
         Expanded(
           child: Column(
@@ -1262,10 +1735,7 @@ class _PesanJadwalState extends State<PesanJadwal> with TickerProviderStateMixin
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 2),
               Text(

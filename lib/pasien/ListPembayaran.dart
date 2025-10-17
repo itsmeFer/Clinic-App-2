@@ -54,7 +54,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
       }
 
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/pembayaran/pasien/$pasienId'),
+        Uri.parse('http://10.227.74.71:8000/api/pembayaran/pasien/$pasienId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',

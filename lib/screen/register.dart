@@ -70,64 +70,74 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
   }
 
   Future<void> registerUser() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    if (!_agreeToTerms) {
-      _showErrorSnackBar('Anda harus menyetujui syarat dan ketentuan');
-      return;
-    }
-
-    final username = usernameController.text.trim();
-    final email = emailController.text.trim();
-    final password = passwordController.text.trim();
-
-    setState(() => isLoading = true);
-
-    try {
-      print('Starting registration for user: $username');
-      
-      // Register the user
-      final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          'email': email,
-          'password': password,
-        }),
-      );
-
-      print('Registration response status: ${response.statusCode}');
-      
-      final data = jsonDecode(response.body);
-      print('Registration response data: $data');
-
-      if ((response.statusCode == 200 || response.statusCode == 201) && data['success'] == true) {
-        print('Registration successful, starting auto-login');
-        
-        // Auto login after successful registration
-        await _autoLogin(username, password);
-        
-      } else {
-        print('Registration failed: ${data['message']}');
-        setState(() => isLoading = false);
-        _showErrorSnackBar(data['message'] ?? 'Registrasi gagal');
-      }
-    } catch (e) {
-      print('Registration error: $e');
-      setState(() => isLoading = false);
-      _showErrorSnackBar('Terjadi kesalahan koneksi. Silakan coba lagi.');
-    }
+  if (!_formKey.currentState!.validate()) return;
+  if (!_agreeToTerms) {
+    _showErrorSnackBar('Anda harus menyetujui syarat dan ketentuan');
+    return;
   }
+
+  final username = usernameController.text.trim();
+  final email = emailController.text.trim();
+  final password = passwordController.text.trim();
+
+  setState(() => isLoading = true);
+
+  try {
+    final response = await http.post(
+      Uri.parse('http://10.227.74.71:8000/api/register'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json', // penting agar Laravel kirim JSON validation
+      },
+      body: jsonEncode({
+        'username': username,
+        'email': email,
+        'password': password,
+      }),
+    );
+
+    final Map<String, dynamic> data = jsonDecode(response.body);
+
+    // Sukses (200/201) - lanjut auto login
+    if ((response.statusCode == 200 || response.statusCode == 201) && data['success'] == true) {
+      await _autoLogin(username, password);
+      return;
+    }
+
+    // Gagal validasi (422) - tampilkan error spesifik
+    if (response.statusCode == 422) {
+      final errors = (data['errors'] ?? {}) as Map<String, dynamic>;
+      // Ambil pesan pertama yang tersedia
+      final msgList = <String>[];
+      for (final key in ['username', 'email', 'password']) {
+        if (errors[key] is List && (errors[key] as List).isNotEmpty) {
+          msgList.add((errors[key] as List).first.toString());
+        }
+      }
+      final message = msgList.isNotEmpty
+          ? msgList.join('\n')
+          : (data['message'] ?? 'Registrasi gagal');
+      setState(() => isLoading = false);
+      _showErrorSnackBar(message);
+      return;
+    }
+
+    // Gagal lain (400/409/500)
+    setState(() => isLoading = false);
+    _showErrorSnackBar(data['message'] ?? 'Registrasi gagal');
+  } catch (e) {
+    setState(() => isLoading = false);
+    _showErrorSnackBar('Terjadi kesalahan koneksi. Silakan coba lagi.');
+  }
+}
+
 
   Future<void> _autoLogin(String username, String password) async {
     try {
       print('Starting auto-login process');
       
       final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/login'),
+        Uri.parse('http://10.227.74.71:8000/api/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -154,7 +164,7 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
         try {
           print('Fetching user profile');
           final profileResponse = await http.get(
-            Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+            Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
             headers: {
               'Authorization': 'Bearer ${data['data']['token']}',
               'Content-Type': 'application/json',
