@@ -134,7 +134,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (!mounted) return;
 
       final response = await http.get(
-        Uri.parse('http://192.168.1.4:8000/api/dokter/get-data-dokter'),
+        Uri.parse('http://10.227.74.71:8000/api/dokter/get-data-dokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -168,7 +168,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
 
       final response = await http.get(
         Uri.parse(
-          'http://192.168.1.4:8000/api/dokter/get-data-kunjungan-by-id-dokter',
+          'http://10.227.74.71:8000/api/dokter/get-data-kunjungan-by-id-dokter',
         ),
         headers: {
           'Authorization': 'Bearer $token',
@@ -236,7 +236,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (!mounted) return;
 
       await http.post(
-        Uri.parse('http://192.168.1.4:8000/api/logout'),
+        Uri.parse('http://10.227.74.71:8000/api/logout'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -575,7 +575,7 @@ class _WelcomeCard extends StatelessWidget {
               child: ClipOval(
                 child: SafeNetworkImage(
                   url: (foto != null)
-                      ? 'http://192.168.1.4:8000/storage/$foto'
+                      ? 'http://10.227.74.71:8000/storage/$foto'
                       : null,
                   size: (isSmall ? 52 : 60),
                   fallback: Icon(

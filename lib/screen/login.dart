@@ -22,7 +22,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
-  
+
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
@@ -49,10 +49,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
     );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOutBack));
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.easeOutBack),
+        );
 
     _fadeController.forward();
     _slideController.forward();
@@ -96,169 +96,201 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Future<void> loginUser() async {
-  if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return;
 
-  final username = usernameController.text.trim();
-  final password = passwordController.text.trim();
+    final username = usernameController.text.trim();
+    final password = passwordController.text.trim();
 
-  setState(() => isLoading = true);
+    setState(() => isLoading = true);
 
-  try {
-    final response = await http.post(
-      Uri.parse('http://192.168.1.4:8000/api/login'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode({'username': username, 'password': password}),
-    );
+    try {
+      final response = await http.post(
+        Uri.parse('http://10.227.74.71:8000/api/login'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({'username': username, 'password': password}),
+      );
 
-    Map<String, dynamic> data = {};
-    try { data = jsonDecode(response.body); } catch (_) {}
+      Map<String, dynamic> data = {};
+      try {
+        data = jsonDecode(response.body);
+      } catch (_) {}
 
-    if (response.statusCode == 200 && (data['success'] == true)) {
-      await _saveCredentials();
+      if (response.statusCode == 200 && (data['success'] == true)) {
+        await _saveCredentials();
 
-      final token = data['data']['token'] as String;
-      final user  = data['data']['user']  as Map<String, dynamic>;
-      final role  = (user['role'] as String?)?.toLowerCase() ?? '';
+        final token = data['data']['token'] as String;
+        final user = data['data']['user'] as Map<String, dynamic>;
+        final role = (user['role'] as String?)?.toLowerCase() ?? '';
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', token);
-      await prefs.setString('username', user['username'] ?? '');
-      await prefs.setString('role', user['role'] ?? '');
-      await prefs.setInt('user_id', (user['id'] as num?)?.toInt() ?? 0);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', token);
+        await prefs.setString('username', user['username'] ?? '');
+        await prefs.setString('role', user['role'] ?? '');
+        await prefs.setInt('user_id', (user['id'] as num?)?.toInt() ?? 0);
 
-      // Kalau pasien, ambil profile pasien_id
-      if (role == 'pasien') {
-        try {
-          final profileResponse = await http.get(
-            Uri.parse('http://192.168.1.4:8000/api/pasien/profile'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
+        // Kalau pasien, ambil profile pasien_id
+        if (role == 'pasien') {
+          try {
+            final profileResponse = await http.get(
+              Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+            );
+            if (profileResponse.statusCode == 200) {
+              final profileData = jsonDecode(profileResponse.body)['data'];
+              await prefs.setInt(
+                'pasien_id',
+                (profileData['id'] as num?)?.toInt() ?? 0,
+              );
+            }
+          } catch (_) {}
+        }
+
+        _showSuccessSnackBar('Selamat datang, ${user['username']}!');
+
+        if (!mounted) return;
+        if (role == 'dokter') {
+          // Kalau ingin verifikasi lagi via endpoint khusus dokter, panggil _loginAsDokter:
+          // await _loginAsDokter(username, password); return;
+
+          Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (context, a, b) => const DokterDashboard(),
+              transitionsBuilder: (context, a, b, child) => SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(1, 0),
+                  end: Offset.zero,
+                ).animate(a),
+                child: child,
+              ),
+            ),
           );
-          if (profileResponse.statusCode == 200) {
-            final profileData = jsonDecode(profileResponse.body)['data'];
-            await prefs.setInt('pasien_id', (profileData['id'] as num?)?.toInt() ?? 0);
-          }
-        } catch (_) {}
+        } else {
+          Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (context, a, b) => const MainWrapper(),
+              transitionsBuilder: (context, a, b, child) => SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(1, 0),
+                  end: Offset.zero,
+                ).animate(a),
+                child: child,
+              ),
+            ),
+          );
+        }
+        return;
       }
 
-      _showSuccessSnackBar('Selamat datang, ${user['username']}!');
-
-      if (!mounted) return;
-      if (role == 'dokter') {
-        // Kalau ingin verifikasi lagi via endpoint khusus dokter, panggil _loginAsDokter:
-        // await _loginAsDokter(username, password); return;
-
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, a, b) => const DokterDashboard(),
-            transitionsBuilder: (context, a, b, child) =>
-              SlideTransition(position: Tween<Offset>(begin: const Offset(1,0), end: Offset.zero).animate(a), child: child),
-          ),
+      // --- Error handling ---
+      if (response.statusCode == 401) {
+        // Akan berisi "Username salah" ATAU "Password salah"
+        final msg = (data['message'] as String?) ?? 'Kredensial tidak valid';
+        _showErrorSnackBar(msg);
+      } else if (response.statusCode == 403) {
+        _showErrorSnackBar((data['message'] as String?) ?? 'Akses ditolak');
+      } else if (response.statusCode == 422) {
+        final errors = (data['errors'] ?? {}) as Map<String, dynamic>;
+        final msgs = <String>[];
+        for (final k in ['username', 'password']) {
+          if (errors[k] is List && (errors[k] as List).isNotEmpty) {
+            msgs.add((errors[k] as List).first.toString());
+          }
+        }
+        _showErrorSnackBar(
+          msgs.isNotEmpty
+              ? msgs.join('\n')
+              : (data['message'] ?? 'Validasi gagal'),
         );
       } else {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, a, b) => const MainWrapper(),
-            transitionsBuilder: (context, a, b, child) =>
-              SlideTransition(position: Tween<Offset>(begin: const Offset(1,0), end: Offset.zero).animate(a), child: child),
-          ),
+        _showErrorSnackBar(
+          (data['message'] as String?) ?? 'Login gagal. Silakan coba lagi.',
         );
       }
-      return;
+    } catch (e) {
+      _showErrorSnackBar('Terjadi kesalahan koneksi. Silakan coba lagi.');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
-
-    // --- Error handling ---
-    if (response.statusCode == 401) {
-      // Akan berisi "Username salah" ATAU "Password salah"
-      final msg = (data['message'] as String?) ?? 'Kredensial tidak valid';
-      _showErrorSnackBar(msg);
-    } else if (response.statusCode == 403) {
-      _showErrorSnackBar((data['message'] as String?) ?? 'Akses ditolak');
-    } else if (response.statusCode == 422) {
-      final errors = (data['errors'] ?? {}) as Map<String, dynamic>;
-      final msgs = <String>[];
-      for (final k in ['username', 'password']) {
-        if (errors[k] is List && (errors[k] as List).isNotEmpty) {
-          msgs.add((errors[k] as List).first.toString());
-        }
-      }
-      _showErrorSnackBar(
-        msgs.isNotEmpty ? msgs.join('\n') : (data['message'] ?? 'Validasi gagal'),
-      );
-    } else {
-      _showErrorSnackBar((data['message'] as String?) ?? 'Login gagal. Silakan coba lagi.');
-    }
-  } catch (e) {
-    _showErrorSnackBar('Terjadi kesalahan koneksi. Silakan coba lagi.');
-  } finally {
-    if (mounted) setState(() => isLoading = false);
   }
-}
-
 
   Future<void> _loginAsDokter(String username, String password) async {
-  try {
-    final response = await http.post(
-      Uri.parse('http://192.168.1.4:8000/api/login-dokter'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode({'username': username, 'password': password}),
-    );
+    try {
+      final response = await http.post(
+        Uri.parse('http://10.227.74.71:8000/api/login-dokter'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({'username': username, 'password': password}),
+      );
 
-    Map<String, dynamic> data = {};
-    try { data = jsonDecode(response.body); } catch (_) {}
+      Map<String, dynamic> data = {};
+      try {
+        data = jsonDecode(response.body);
+      } catch (_) {}
 
-    if (response.statusCode == 200 && data['success'] == true) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', data['data']['token']);
-      await prefs.setString('username', data['data']['user']['username']);
-      await prefs.setString('role', data['data']['user']['role']);
-      await prefs.setInt('user_id', data['data']['user']['id']);
+      if (response.statusCode == 200 && data['success'] == true) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', data['data']['token']);
+        await prefs.setString('username', data['data']['user']['username']);
+        await prefs.setString('role', data['data']['user']['role']);
+        await prefs.setInt('user_id', data['data']['user']['id']);
 
-      _showSuccessSnackBar('Selamat datang, Dr. ${data['data']['user']['username']}!');
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, a, b) => const DokterDashboard(),
-            transitionsBuilder: (context, a, b, child) =>
-              SlideTransition(position: Tween<Offset>(begin: const Offset(1,0), end: Offset.zero).animate(a), child: child),
-          ),
+        _showSuccessSnackBar(
+          'Selamat datang, Dr. ${data['data']['user']['username']}!',
         );
-      }
-    } else if (response.statusCode == 401) {
-      // Bisa "Username salah" atau "Password salah"
-      _showErrorSnackBar((data['message'] as String?) ?? 'Kredensial tidak valid');
-    } else if (response.statusCode == 403) {
-      _showErrorSnackBar((data['message'] as String?) ?? 'Akses ditolak');
-    } else if (response.statusCode == 422) {
-      final errors = (data['errors'] ?? {}) as Map<String, dynamic>;
-      final msgs = <String>[];
-      for (final k in ['username', 'password']) {
-        if (errors[k] is List && (errors[k] as List).isNotEmpty) {
-          msgs.add((errors[k] as List).first.toString());
-        }
-      }
-      _showErrorSnackBar(msgs.isNotEmpty ? msgs.join('\n') : (data['message'] ?? 'Validasi gagal'));
-    } else {
-      _showErrorSnackBar(data['message'] ?? 'Login dokter gagal');
-    }
-  } catch (e) {
-    _showErrorSnackBar('Login dokter gagal. Silakan coba lagi.');
-  }
-}
 
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (context, a, b) => const DokterDashboard(),
+              transitionsBuilder: (context, a, b, child) => SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(1, 0),
+                  end: Offset.zero,
+                ).animate(a),
+                child: child,
+              ),
+            ),
+          );
+        }
+      } else if (response.statusCode == 401) {
+        // Bisa "Username salah" atau "Password salah"
+        _showErrorSnackBar(
+          (data['message'] as String?) ?? 'Kredensial tidak valid',
+        );
+      } else if (response.statusCode == 403) {
+        _showErrorSnackBar((data['message'] as String?) ?? 'Akses ditolak');
+      } else if (response.statusCode == 422) {
+        final errors = (data['errors'] ?? {}) as Map<String, dynamic>;
+        final msgs = <String>[];
+        for (final k in ['username', 'password']) {
+          if (errors[k] is List && (errors[k] as List).isNotEmpty) {
+            msgs.add((errors[k] as List).first.toString());
+          }
+        }
+        _showErrorSnackBar(
+          msgs.isNotEmpty
+              ? msgs.join('\n')
+              : (data['message'] ?? 'Validasi gagal'),
+        );
+      } else {
+        _showErrorSnackBar(data['message'] ?? 'Login dokter gagal');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Login dokter gagal. Silakan coba lagi.');
+    }
+  }
 
   Future<void> _loginAsPasien(Map<String, dynamic> data) async {
     try {
@@ -269,7 +301,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       await prefs.setInt('user_id', data['data']['user']['id']);
 
       final profileResponse = await http.get(
-        Uri.parse('http://192.168.1.4:8000/api/pasien/profile'),
+        Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer ${data['data']['token']}',
           'Content-Type': 'application/json',
@@ -282,22 +314,26 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         await prefs.setInt('pasien_id', profileData['id']);
       }
 
-      _showSuccessSnackBar('Selamat datang, ${data['data']['user']['username']}!');
+      _showSuccessSnackBar(
+        'Selamat datang, ${data['data']['user']['username']}!',
+      );
 
       if (mounted) {
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const MainWrapper(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(1.0, 0.0),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: child,
-              );
-            },
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const MainWrapper(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(1.0, 0.0),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  );
+                },
           ),
         );
       }
@@ -314,7 +350,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           children: [
             const Icon(Icons.check_circle, color: Colors.white, size: 20),
             const SizedBox(width: 8),
-            Expanded(child: Text(message, style: const TextStyle(fontSize: 14))),
+            Expanded(
+              child: Text(message, style: const TextStyle(fontSize: 14)),
+            ),
           ],
         ),
         backgroundColor: const Color(0xFF4CAF50),
@@ -333,7 +371,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           children: [
             const Icon(Icons.error_outline, color: Colors.white, size: 20),
             const SizedBox(width: 8),
-            Expanded(child: Text(message, style: const TextStyle(fontSize: 14))),
+            Expanded(
+              child: Text(message, style: const TextStyle(fontSize: 14)),
+            ),
           ],
         ),
         backgroundColor: const Color(0xFFE53935),
@@ -368,7 +408,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isTablet = size.width > 600;
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FFFE),
       body: SafeArea(
@@ -397,17 +437,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
                         // Logo and Title Section
                         _buildHeaderSection(isTablet),
-                        
+
                         SizedBox(height: isTablet ? 48 : 40),
 
                         // Login Form Card
                         _buildLoginForm(isTablet),
-                        
+
                         SizedBox(height: isTablet ? 32 : 24),
 
                         // Additional Options
                         _buildAdditionalOptions(),
-                        
+
                         const SizedBox(height: 40),
                       ],
                     ),
@@ -458,9 +498,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             );
           },
         ),
-        
+
         SizedBox(height: isTablet ? 24 : 20),
-        
+
         // App Title
         Text(
           'Royal Clinic',
@@ -471,9 +511,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             letterSpacing: 0.5,
           ),
         ),
-        
+
         SizedBox(height: isTablet ? 12 : 8),
-        
+
         Text(
           'Masuk ke akun Anda',
           style: TextStyle(
@@ -512,9 +552,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               validator: _validateUsername,
               isTablet: isTablet,
             ),
-            
+
             SizedBox(height: isTablet ? 24 : 20),
-            
+
             // Password Field
             _buildTextField(
               controller: passwordController,
@@ -537,9 +577,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 },
               ),
             ),
-            
+
             SizedBox(height: isTablet ? 20 : 16),
-            
+
             // Remember Me only (removed duplicate forgot password)
             Row(
               mainAxisAlignment: MainAxisAlignment.start,
@@ -568,9 +608,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
               ],
             ),
-            
+
             SizedBox(height: isTablet ? 32 : 24),
-            
+
             // Login Button
             _buildLoginButton(isTablet),
           ],
@@ -605,10 +645,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           controller: controller,
           obscureText: obscureText,
           validator: validator,
-          style: TextStyle(
-            fontSize: isTablet ? 16 : 15,
-            color: Colors.black87,
-          ),
+          style: TextStyle(fontSize: isTablet ? 16 : 15, color: Colors.black87),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(
@@ -725,16 +762,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
                 'atau',
-                style: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
               ),
             ),
             Expanded(child: Divider(color: Colors.grey.shade300)),
           ],
         ),
-        
+
         const SizedBox(height: 20),
 
         // Lupa Username dan Lupa Password
@@ -752,16 +786,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     Navigator.push(
                       context,
                       PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) => const ForgotUsernamePage(),
-                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(1.0, 0.0),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          );
-                        },
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            const ForgotUsernamePage(),
+                        transitionsBuilder:
+                            (context, animation, secondaryAnimation, child) {
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(1.0, 0.0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              );
+                            },
                       ),
                     );
                   },
@@ -805,16 +841,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     Navigator.push(
                       context,
                       PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) => const ForgotPasswordPage(),
-                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(1.0, 0.0),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          );
-                        },
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            const ForgotPasswordPage(),
+                        transitionsBuilder:
+                            (context, animation, secondaryAnimation, child) {
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(1.0, 0.0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              );
+                            },
                       ),
                     );
                   },
@@ -847,9 +885,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
           ],
         ),
-        
+
         const SizedBox(height: 20),
-        
+
         // Register Link
         Container(
           width: double.infinity,
@@ -863,16 +901,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               Navigator.push(
                 context,
                 PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => const RegisterPage(),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    return SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(1.0, 0.0),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
-                    );
-                  },
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      const RegisterPage(),
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) {
+                        return SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(1.0, 0.0),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        );
+                      },
                 ),
               );
             },
@@ -902,16 +942,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
           ),
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // App Info
         Text(
           'Royal Clinic Mobile App v1.0.0',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade400,
-          ),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
         ),
       ],
     );
@@ -933,10 +970,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'OK',
-              style: TextStyle(color: Color(0xFF00897B)),
-            ),
+            child: const Text('OK', style: TextStyle(color: Color(0xFF00897B))),
           ),
         ],
       ),

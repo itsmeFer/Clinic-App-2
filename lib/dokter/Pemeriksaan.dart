@@ -47,7 +47,7 @@ class _PemeriksaanState extends State<Pemeriksaan> {
   String _searchLayananQuery = '';
 
   // API Configuration
-  static const String baseUrl = 'http://192.168.1.4:8000/api';
+  static const String baseUrl = 'http://10.227.74.71:8000/api';
   String? _authToken;
 
   @override

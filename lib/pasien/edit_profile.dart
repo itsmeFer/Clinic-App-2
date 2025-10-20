@@ -95,7 +95,7 @@ class _EditProfilePageState extends State<EditProfilePage>
 
     try {
       final response = await http.get(
-        Uri.parse('http://192.168.1.4:8000/api/pasien/profile'),
+        Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -381,7 +381,7 @@ class _EditProfilePageState extends State<EditProfilePage>
 
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse('http://192.168.1.4:8000/api/pasien/update'),
+      Uri.parse('http://10.227.74.71:8000/api/pasien/update'),
     );
 
     if (token != null) {
@@ -531,7 +531,7 @@ class _EditProfilePageState extends State<EditProfilePage>
                       ? Image.file(selectedImage!, fit: BoxFit.cover)
                       : currentFotoUrl != null
                           ? Image.network(
-                              'http://192.168.1.4:8000/storage/$currentFotoUrl',
+                              'http://10.227.74.71:8000/storage/$currentFotoUrl',
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return _avatarPlaceholder();
