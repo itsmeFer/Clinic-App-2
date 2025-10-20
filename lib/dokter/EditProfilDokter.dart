@@ -52,10 +52,10 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
     try {
       final token = await getToken();
       
-      print('Loading spesialis from: http://10.227.74.71:8000/api/getDataSpesialisasiDokter');
+      print('Loading spesialis from: http://192.168.1.4:8000/api/getDataSpesialisasiDokter');
       
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/getDataSpesialisasiDokter'),
+        Uri.parse('http://192.168.1.4:8000/api/getDataSpesialisasiDokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -97,7 +97,7 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
       print('Trying alternative endpoint without auth...');
       
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/getDataSpesialisasiDokter'),
+        Uri.parse('http://192.168.1.4:8000/api/getDataSpesialisasiDokter'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -175,7 +175,7 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
       
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://10.227.74.71:8000/api/dokter/update-profile'),
+        Uri.parse('http://192.168.1.4:8000/api/dokter/update-profile'),
       );
 
       request.headers.addAll({
@@ -363,7 +363,7 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
                         ? FileImage(_imageFile!)
                         : (widget.dokterData['foto_dokter'] != null
                             ? NetworkImage(
-                                'http://10.227.74.71:8000/storage/${widget.dokterData['foto_dokter']}',
+                                'http://192.168.1.4:8000/storage/${widget.dokterData['foto_dokter']}',
                               )
                             : null),
                     child: (_imageFile == null && widget.dokterData['foto_dokter'] == null)

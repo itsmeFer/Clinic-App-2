@@ -105,7 +105,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   try {
     final response = await http.post(
-      Uri.parse('http://10.227.74.71:8000/api/login'),
+      Uri.parse('http://192.168.1.4:8000/api/login'),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -133,7 +133,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       if (role == 'pasien') {
         try {
           final profileResponse = await http.get(
-            Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
+            Uri.parse('http://192.168.1.4:8000/api/pasien/profile'),
             headers: {
               'Authorization': 'Bearer $token',
               'Content-Type': 'application/json',
@@ -207,7 +207,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _loginAsDokter(String username, String password) async {
   try {
     final response = await http.post(
-      Uri.parse('http://10.227.74.71:8000/api/login-dokter'),
+      Uri.parse('http://192.168.1.4:8000/api/login-dokter'),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -269,7 +269,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       await prefs.setInt('user_id', data['data']['user']['id']);
 
       final profileResponse = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
+        Uri.parse('http://192.168.1.4:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer ${data['data']['token']}',
           'Content-Type': 'application/json',

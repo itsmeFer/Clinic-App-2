@@ -78,11 +78,11 @@ Future<bool> _isFromList() async {
     
     if (selectedKunjunganId != null && fromListPayment) {
       // Dari ListPembayaran - ambil detail specific kunjungan
-      url = 'http://10.227.74.71:8000/api/pembayaran/detail/$selectedKunjunganId';
+      url = 'http://192.168.1.4:8000/api/pembayaran/detail/$selectedKunjunganId';
       print('🔍 Using specific kunjungan_id from SharedPreferences: $selectedKunjunganId');
     } else if (widget.kunjunganId != null) {
       // Dari parameter constructor (fallback)
-      url = 'http://10.227.74.71:8000/api/pembayaran/detail/${widget.kunjunganId}';
+      url = 'http://192.168.1.4:8000/api/pembayaran/detail/${widget.kunjunganId}';
       print('🔍 Using kunjunganId from constructor: ${widget.kunjunganId}');
     } else {
       // Original behavior - ambil dari pasien_id
@@ -94,7 +94,7 @@ Future<bool> _isFromList() async {
         });
         return;
       }
-      url = 'http://10.227.74.71:8000/api/pembayaran/pasien/$pasienId';
+      url = 'http://192.168.1.4:8000/api/pembayaran/pasien/$pasienId';
       print('🔍 Using original behavior with pasien_id: $pasienId');
     }
 
@@ -212,7 +212,7 @@ Future<bool> _isFromList() async {
       };
 
       final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/pembayaran/midtrans/create'),
+        Uri.parse('http://192.168.1.4:8000/api/pembayaran/midtrans/create'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -471,7 +471,7 @@ Future<bool> _isFromList() async {
       print('💪 Force updating payment status for pembayaran_id: $pembayaranId');
       
       final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/pembayaran/force-update'),
+        Uri.parse('http://192.168.1.4:8000/api/pembayaran/force-update'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -595,7 +595,7 @@ Future<bool> _isFromList() async {
       print('🔍 Checking payment status for order: $orderId');
 
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/pembayaran/status/$orderId'),
+        Uri.parse('http://192.168.1.4:8000/api/pembayaran/status/$orderId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',

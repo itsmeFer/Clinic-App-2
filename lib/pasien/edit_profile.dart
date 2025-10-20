@@ -1,9 +1,12 @@
+import 'package:RoyalClinic/pasien/dashboardScreen.dart';
+import 'package:RoyalClinic/screen/login.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+// Import halaman login - sesuaikan dengan path yang benar
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -92,7 +95,7 @@ class _EditProfilePageState extends State<EditProfilePage>
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
+        Uri.parse('http://192.168.1.4:8000/api/pasien/profile'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -114,6 +117,142 @@ class _EditProfilePageState extends State<EditProfilePage>
     } catch (e) {
       if (!mounted) return;
       safeSetState(() => isLoadingData = false);
+    }
+  }
+
+  // Fungsi Logout
+  Future<void> _showLogoutDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.logout,
+                color: Colors.red.shade600,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Keluar Akun',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Apakah Anda yakin ingin keluar dari akun ini? Anda perlu login kembali untuk menggunakan aplikasi.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Tutup dialog
+              },
+              child: Text(
+                'Batal',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {
+                Navigator.of(context).pop(); // Tutup dialog
+                _performLogout(); // Lakukan logout
+              },
+              child: const Text(
+                'Ya, Keluar',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _performLogout() async {
+    // Show loading
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: kTealDark),
+      ),
+    );
+
+    try {
+      // Clear semua data dari SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+
+      // Tutup loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Navigasi ke halaman login dan hapus semua route sebelumnya
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Berhasil keluar dari akun'),
+              ],
+            ),
+            backgroundColor: const Color(0xFF4CAF50),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      // Tutup loading dialog jika error
+      if (mounted) Navigator.of(context).pop();
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Gagal logout: $e')),
+              ],
+            ),
+            backgroundColor: const Color(0xFFE53935),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
     }
   }
 
@@ -242,7 +381,7 @@ class _EditProfilePageState extends State<EditProfilePage>
 
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse('http://10.227.74.71:8000/api/pasien/update'),
+      Uri.parse('http://192.168.1.4:8000/api/pasien/update'),
     );
 
     if (token != null) {
@@ -274,8 +413,16 @@ class _EditProfilePageState extends State<EditProfilePage>
 
       if (response.statusCode == 200 && data['success'] == true) {
         _showSuccessSnackBar('Profil berhasil diperbarui');
+        
         if (!mounted) return;
-        Navigator.pop(context, true);
+        
+        // Navigasi ke MainWrapper (halaman utama dengan bottom navigation) dan hapus semua route sebelumnya
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const MainWrapper()),
+          (route) => false,
+        );
+        
       } else {
         _showErrorSnackBar(data['message'] ?? 'Gagal update profil');
       }
@@ -384,7 +531,7 @@ class _EditProfilePageState extends State<EditProfilePage>
                       ? Image.file(selectedImage!, fit: BoxFit.cover)
                       : currentFotoUrl != null
                           ? Image.network(
-                              'http://10.227.74.71:8000/storage/$currentFotoUrl',
+                              'http://192.168.1.4:8000/storage/$currentFotoUrl',
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return _avatarPlaceholder();
@@ -631,6 +778,17 @@ class _EditProfilePageState extends State<EditProfilePage>
         style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800),
       ),
       centerTitle: true,
+      actions: [
+        // Tombol Logout di AppBar
+        IconButton(
+          icon: Icon(
+            Icons.logout,
+            color: Colors.red.shade600,
+          ),
+          onPressed: _showLogoutDialog,
+          tooltip: 'Keluar Akun',
+        ),
+      ],
     );
   }
 
@@ -693,7 +851,7 @@ class _EditProfilePageState extends State<EditProfilePage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kBg,
-      appBar: _buildAppBar(),
+      appBar: _buildAppBar(), // Tambahkan kembali AppBar dengan tombol logout
       bottomNavigationBar: _saveBar(),
       body: isLoadingData
           ? const Center(child: CircularProgressIndicator(color: kTealDark))
@@ -785,6 +943,73 @@ class _EditProfilePageState extends State<EditProfilePage>
                               ),
                               const SizedBox(height: 16),
                               _genderSelector(),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Tambahan: Tombol Logout di bagian bawah (opsional)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(.04),
+                                blurRadius: 14,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade600,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Pengaturan Akun',
+                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _showLogoutDialog,
+                                  icon: Icon(
+                                    Icons.logout,
+                                    color: Colors.red.shade600,
+                                    size: 20,
+                                  ),
+                                  label: Text(
+                                    'Keluar dari Akun',
+                                    style: TextStyle(
+                                      color: Colors.red.shade600,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                    side: BorderSide(color: Colors.red.shade600),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),

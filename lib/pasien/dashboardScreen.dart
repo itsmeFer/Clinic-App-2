@@ -160,7 +160,7 @@ class _MainWrapperState extends State<MainWrapper> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/getAllDokter'),
+        Uri.parse('http://192.168.1.4:8000/api/getAllDokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -372,7 +372,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return;
       }
       final res = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
+        Uri.parse('http://192.168.1.4:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -430,7 +430,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (!mounted) return;
       final token = prefs.getString('token');
       final res = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/getDataTestimoni'),
+        Uri.parse('http://192.168.1.4:8000/api/getDataTestimoni'),
         headers: {if (token != null) 'Authorization': 'Bearer $token'},
       );
       if (!mounted) return;
@@ -643,7 +643,7 @@ class _ProfileCard extends StatelessWidget {
       children: [
         _safeImageSquare(
           url: pasien['foto_pasien'] != null
-              ? 'http://10.227.74.71:8000/storage/${pasien['foto_pasien']}'
+              ? 'http://192.168.1.4:8000/storage/${pasien['foto_pasien']}'
               : null,
           size: 58,
           fallbackIcon: Icons.person,
@@ -1580,7 +1580,7 @@ class _DokterTersediaSection extends StatelessWidget {
                               ),
                             )
                           : Image.network(
-                              'http://10.227.74.71:8000/storage/$foto',
+                              'http://192.168.1.4:8000/storage/$foto',
                               width: 70,
                               height: 70,
                               fit: BoxFit.cover,

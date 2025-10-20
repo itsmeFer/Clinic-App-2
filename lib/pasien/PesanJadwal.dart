@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'RiwayatKunjungan.dart';
-import 'package:intl/intl.dart'; // Tambahkan import ini untuk format tanggal
+import 'package:intl/intl.dart';
 
 class PesanJadwal extends StatefulWidget {
   final List<dynamic>? allJadwal;
@@ -205,7 +205,7 @@ class _PesanJadwalState extends State<PesanJadwal>
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/getDataPoli'),
+        Uri.parse('http://192.168.1.4:8000/api/getDataPoli'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -237,7 +237,7 @@ class _PesanJadwalState extends State<PesanJadwal>
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/getAllDokter'),
+        Uri.parse('http://192.168.1.4:8000/api/getAllDokter'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -333,7 +333,7 @@ class _PesanJadwalState extends State<PesanJadwal>
     return prefs.getString('token');
   }
 
-  // FUNGSI BARU: Mengonversi hari Indonesia ke nomor hari
+  // Mengonversi hari Indonesia ke nomor hari
   int getHariNumber(String hari) {
     final hariMapping = {
       'Senin': 1,
@@ -347,75 +347,75 @@ class _PesanJadwalState extends State<PesanJadwal>
     return hariMapping[hari] ?? 1;
   }
 
-DateTime getNextDateByDay(
-  int dayOfWeek, {
-  String? jamAwal,
-  String? jamSelesai,
-}) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
+  DateTime getNextDateByDay(
+    int dayOfWeek, {
+    String? jamAwal,
+    String? jamSelesai,
+  }) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-  int daysUntilTarget = (dayOfWeek - today.weekday) % 7;
+    int daysUntilTarget = (dayOfWeek - today.weekday) % 7;
 
-  // Jika hari yang sama (daysUntilTarget == 0)
-  if (daysUntilTarget == 0) {
-    // Jika ada info jam praktik, cek apakah masih dalam jam kerja
-    if (jamAwal != null && jamSelesai != null) {
-      if (_isWithinWorkingHours(now, jamAwal, jamSelesai)) {
-        // ✅ PERBAIKAN: Masih dalam jam kerja, gunakan hari ini
-        return today;
+    // Jika hari yang sama (daysUntilTarget == 0)
+    if (daysUntilTarget == 0) {
+      // Jika ada info jam praktik, cek apakah masih dalam jam kerja
+      if (jamAwal != null && jamSelesai != null) {
+        if (_isWithinWorkingHours(now, jamAwal, jamSelesai)) {
+          // Masih dalam jam kerja, gunakan hari ini
+          return today;
+        } else {
+          // Sudah lewat jam kerja, loncat ke minggu depan
+          daysUntilTarget = 7;
+        }
       } else {
-        // ✅ PERBAIKAN: Sudah lewat jam kerja, loncat ke minggu depan
-        daysUntilTarget = 7;
+        // Jika tidak ada info jam dan masih siang (sebelum jam 17:00),
+        // gunakan hari ini. Jika sudah sore, gunakan minggu depan
+        if (now.hour < 17) {
+          return today;
+        } else {
+          daysUntilTarget = 7;
+        }
       }
-    } else {
-      // ✅ PERBAIKAN: Jika tidak ada info jam dan masih siang (sebelum jam 17:00), 
-      // gunakan hari ini. Jika sudah sore, gunakan minggu depan
-      if (now.hour < 17) {
-        return today;
-      } else {
-        daysUntilTarget = 7;
-      }
+    }
+
+    return today.add(Duration(days: daysUntilTarget));
+  }
+
+  // Helper function untuk cek jam kerja
+  bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
+    try {
+      // Parse jam awal (contoh: "08:00")
+      final awalParts = jamAwal.split(':');
+      final jamAwalInt = int.parse(awalParts[0]);
+      final menitAwalInt = int.parse(awalParts[1]);
+
+      // Parse jam selesai (contoh: "16:00")
+      final selesaiParts = jamSelesai.split(':');
+      final jamSelesaiInt = int.parse(selesaiParts[0]);
+      final menitSelesaiInt = int.parse(selesaiParts[1]);
+
+      // Waktu sekarang dalam menit sejak tengah malam
+      final nowMinutes = now.hour * 60 + now.minute;
+
+      // Jam kerja dalam menit sejak tengah malam
+      final startMinutes = jamAwalInt * 60 + menitAwalInt;
+      final endMinutes = jamSelesaiInt * 60 + menitSelesaiInt;
+
+      // Beri toleransi 30 menit sebelum jam tutup untuk booking
+      final bookingCutoffMinutes = endMinutes - 30;
+
+      // Cek apakah masih dalam rentang waktu untuk booking
+      return nowMinutes >= startMinutes && nowMinutes <= bookingCutoffMinutes;
+    } catch (e) {
+      print('Error parsing working hours: $e');
+      // Jika error parsing, cek berdasarkan jam sekarang
+      // Jam 8 pagi sampai 4 sore adalah jam kerja default
+      return now.hour >= 8 && now.hour < 16;
     }
   }
 
-  return today.add(Duration(days: daysUntilTarget));
-}
-
-// Helper function untuk cek jam kerja
-bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
-  try {
-    // Parse jam awal (contoh: "08:00")
-    final awalParts = jamAwal.split(':');
-    final jamAwalInt = int.parse(awalParts[0]);
-    final menitAwalInt = int.parse(awalParts[1]);
-
-    // Parse jam selesai (contoh: "16:00")
-    final selesaiParts = jamSelesai.split(':');
-    final jamSelesaiInt = int.parse(selesaiParts[0]);
-    final menitSelesaiInt = int.parse(selesaiParts[1]);
-
-    // Waktu sekarang dalam menit sejak tengah malam
-    final nowMinutes = now.hour * 60 + now.minute;
-
-    // Jam kerja dalam menit sejak tengah malam
-    final startMinutes = jamAwalInt * 60 + menitAwalInt;
-    final endMinutes = jamSelesaiInt * 60 + menitSelesaiInt;
-
-    // ✅ PERBAIKAN: Beri toleransi 30 menit sebelum jam tutup untuk booking
-    final bookingCutoffMinutes = endMinutes - 30;
-
-    // Cek apakah masih dalam rentang waktu untuk booking
-    return nowMinutes >= startMinutes && nowMinutes <= bookingCutoffMinutes;
-  } catch (e) {
-    print('Error parsing working hours: $e');
-    // ✅ PERBAIKAN: Jika error parsing, cek berdasarkan jam sekarang
-    // Jam 8 pagi sampai 4 sore adalah jam kerja default
-    return now.hour >= 8 && now.hour < 16;
-  }
-}
-
-  // FUNGSI BARU: Format tanggal dalam bahasa Indonesia
+  // Format tanggal dalam bahasa Indonesia
   String formatTanggalIndonesia(DateTime date) {
     final bulanIndonesia = [
       'Jan',
@@ -435,8 +435,7 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
     return '${date.day} ${bulanIndonesia[date.month - 1]} ${date.year}';
   }
 
-  // FUNGSI BARU: Format jadwal dengan hari dan tanggal
-  // PERBAIKAN - pass jam kerja
+  // Format jadwal dengan hari dan tanggal
   String formatJadwalDropdown(Map<String, dynamic> jadwal) {
     final hari = jadwal['hari'];
     final jamAwal = jadwal['jam_awal'];
@@ -454,148 +453,350 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
   }
 
   Future<void> pesanSekarang(int dokterId) async {
-  final pasienId = await getPasienId();
-  final token = await getToken();
-  final keluhan = keluhanControllers[dokterId]?.text.trim() ?? '';
-  final selectedJadwalData = selectedJadwal[dokterId];
+    final pasienId = await getPasienId();
+    final token = await getToken();
+    final keluhan = keluhanControllers[dokterId]?.text.trim() ?? '';
+    final selectedJadwalData = selectedJadwal[dokterId];
 
-  if (pasienId == null || token == null) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data pasien atau token tidak ditemukan'),
-        ),
-      );
-    }
-    return;
-  }
-
-  if (keluhan.isEmpty || selectedJadwalData == null) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pilih jadwal dan isi keluhan terlebih dahulu'),
-        ),
-      );
-    }
-    return;
-  }
-
-  // Cari dokter untuk mendapatkan poli_id
-  final dokter = searchFilteredDokter.firstWhere(
-    (d) => (d['id_dokter'] ?? d['id']) == dokterId,
-    orElse: () => null,
-  );
-
-  if (dokter == null) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data dokter tidak ditemukan')),
-      );
-    }
-    return;
-  }
-
-  final poliId = dokter['poli']?['id'];
-  if (poliId == null) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data poli dokter tidak ditemukan')),
-      );
-    }
-    return;
-  }
-
-  // ✅ PERBAIKAN: Hitung tanggal yang benar berdasarkan jadwal yang dipilih
-  final hari = selectedJadwalData['hari'];
-  final jamAwal = selectedJadwalData['jam_awal'];
-  final jamSelesai = selectedJadwalData['jam_selesai'];
-  
-  final hariNumber = getHariNumber(hari);
-  final tanggalKunjungan = getNextDateByDay(
-    hariNumber,
-    jamAwal: jamAwal,
-    jamSelesai: jamSelesai,
-  );
-  
-  // Format tanggal untuk dikirim ke backend (YYYY-MM-DD)
-  final tanggalKunjunganString = 
-      '${tanggalKunjungan.year}-${tanggalKunjungan.month.toString().padLeft(2, '0')}-${tanggalKunjungan.day.toString().padLeft(2, '0')}';
-
-  if (mounted) {
-    setState(() => isLoading = true);
-  }
-
-  try {
-    final response = await http.post(
-      Uri.parse('http://10.227.74.71:8000/api/kunjungan/create'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'pasien_id': pasienId,
-        'dokter_id': dokterId,
-        'poli_id': poliId,
-        'tanggal_kunjungan': tanggalKunjunganString, // ✅ Menggunakan tanggal yang benar
-        'keluhan_awal': keluhan,
-      }),
-    );
-
-    final data = jsonDecode(response.body);
-
-    if (response.statusCode == 200 && data['success'] == true) {
-      final dokterNama = dokter['nama_dokter'] ?? 'Dokter';
-
-      keluhanControllers[dokterId]?.clear();
+    if (pasienId == null || token == null) {
       if (mounted) {
-        setState(() => selectedJadwal[dokterId] = null);
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Berhasil memesan dengan $dokterNama untuk tanggal $tanggalKunjunganString, No Antrian: ${data['Data No Antrian'] ?? '-'}',
-            ),
-            duration: const Duration(seconds: 3),
+          const SnackBar(
+            content: Text('Data pasien atau token tidak ditemukan'),
           ),
         );
       }
-
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const RiwayatKunjungan()),
-        );
-      }
+      return;
     }
-    // Handle error responses...
-    else if (response.statusCode == 422 &&
-        data['error_code'] == 'PROFILE_INCOMPLETE') {
-      if (mounted) {
-        _showProfileIncompleteDialog();
-      }
-    } else {
+
+    if (keluhan.isEmpty || selectedJadwalData == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data['message'] ?? 'Gagal memesan jadwal')),
+          const SnackBar(
+            content: Text('Pilih jadwal dan isi keluhan terlebih dahulu'),
+          ),
         );
       }
+      return;
     }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Kesalahan koneksi: $e')));
+
+    // Cari dokter untuk mendapatkan poli_id
+    final dokter = searchFilteredDokter.firstWhere(
+      (d) => (d['id_dokter'] ?? d['id']) == dokterId,
+      orElse: () => null,
+    );
+
+    if (dokter == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Data dokter tidak ditemukan')),
+        );
+      }
+      return;
     }
-  } finally {
+
+    final poliId = dokter['poli']?['id'];
+    if (poliId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Data poli dokter tidak ditemukan')),
+        );
+      }
+      return;
+    }
+
+    // Hitung tanggal yang benar berdasarkan jadwal yang dipilih
+    final hari = selectedJadwalData['hari'];
+    final jamAwal = selectedJadwalData['jam_awal'];
+    final jamSelesai = selectedJadwalData['jam_selesai'];
+
+    final hariNumber = getHariNumber(hari);
+    final tanggalKunjungan = getNextDateByDay(
+      hariNumber,
+      jamAwal: jamAwal,
+      jamSelesai: jamSelesai,
+    );
+
+    // Format tanggal untuk dikirim ke backend (YYYY-MM-DD)
+    final tanggalKunjunganString =
+        '${tanggalKunjungan.year}-${tanggalKunjungan.month.toString().padLeft(2, '0')}-${tanggalKunjungan.day.toString().padLeft(2, '0')}';
+
     if (mounted) {
-      setState(() => isLoading = false);
+      setState(() => isLoading = true);
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://192.168.1.4:8000/api/kunjungan/create'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'pasien_id': pasienId,
+          'dokter_id': dokterId,
+          'poli_id': poliId,
+          'tanggal_kunjungan': tanggalKunjunganString,
+          'keluhan_awal': keluhan,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        final dokterNama = dokter['nama_dokter'] ?? 'Dokter';
+
+        keluhanControllers[dokterId]?.clear();
+        if (mounted) {
+          setState(() => selectedJadwal[dokterId] = null);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Berhasil memesan dengan $dokterNama untuk tanggal $tanggalKunjunganString, No Antrian: ${data['Data No Antrian'] ?? '-'}',
+              ),
+              duration: const Duration(seconds: 3),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const MainWrapperWithIndex(initialIndex: 2),
+            ),
+          );
+        }
+      }
+      // Handle profile incomplete
+      else if (response.statusCode == 422 &&
+          data['error_code'] == 'PROFILE_INCOMPLETE') {
+        if (mounted) {
+          _showProfileIncompleteDialog();
+        }
+      }
+      // Handle duplicate active booking
+      else if (response.statusCode == 422 &&
+          data['error_code'] == 'DUPLICATE_ACTIVE_BOOKING') {
+        if (mounted) {
+          _showDuplicateBookingDialog(data);
+        }
+      }
+      // Handle other errors
+      else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(data['message'] ?? 'Gagal memesan jadwal'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Kesalahan koneksi: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
-}
 
-  // Tambahkan method untuk dialog profil tidak lengkap
+  // Dialog untuk duplicate booking
+  void _showDuplicateBookingDialog(Map<String, dynamic> data) {
+    final existingBooking = data['existing_booking'];
+    final status = existingBooking['status'];
+    final noAntrian = existingBooking['no_antrian'];
+    final tanggalKunjungan = existingBooking['tanggal_kunjungan'];
+
+    // Format tanggal yang lebih baik
+    String formattedDate = tanggalKunjungan;
+    try {
+      if (tanggalKunjungan.contains('T')) {
+        // Jika format datetime, ambil hanya tanggal
+        final dateTime = DateTime.parse(tanggalKunjungan);
+        formattedDate = formatTanggalIndonesia(dateTime);
+      } else if (tanggalKunjungan.contains('-')) {
+        // Jika format YYYY-MM-DD
+        final parts = tanggalKunjungan.split('-');
+        if (parts.length == 3) {
+          final dateTime = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+          formattedDate = formatTanggalIndonesia(dateTime);
+        }
+      }
+    } catch (e) {
+      // Jika gagal parse, gunakan format asli
+      formattedDate = tanggalKunjungan;
+    }
+
+    // Konversi status ke bahasa Indonesia
+    final statusIndonesia = {
+      'Pending': 'Menunggu Konfirmasi',
+      'Confirmed': 'Dikonfirmasi',
+      'Waiting': 'Menunggu Antrian',
+      'Engaged': 'Sedang Konsultasi'
+    };
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.orange.shade600,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Jadwal Sudah Ada',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                data['message'] ?? 'Anda sudah memiliki jadwal pada tanggal yang sama.',
+                style: const TextStyle(fontSize: 14, height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Detail Jadwal Existing:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.event, size: 16, color: Colors.grey),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Tanggal: $formattedDate',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.confirmation_number, size: 16, color: Colors.grey),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'No. Antrian: $noAntrian',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.info, size: 16, color: Colors.grey),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Status: ${statusIndonesia[status] ?? status}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Pilihan Anda:',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '• Pilih tanggal lain untuk booking baru\n• Batalkan jadwal yang sudah ada (jika memungkinkan)\n• Cek status jadwal di menu Riwayat Kunjungan',
+                style: TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Tutup dialog
+              },
+              child: Text(
+                'Pilih Tanggal Lain',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00897B),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {
+                Navigator.of(context).pop(); // Tutup dialog
+                // Navigate ke halaman riwayat kunjungan
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const MainWrapperWithIndex(initialIndex: 2),
+                  ),
+                );
+              },
+              child: const Text(
+                'Lihat Riwayat',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Dialog untuk profil tidak lengkap
   void _showProfileIncompleteDialog() {
     showDialog(
       context: context,
@@ -645,7 +846,11 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                 ),
               ),
               onPressed: () {
-                  Navigator.pop(context, MaterialPageRoute(builder: (context) => EditProfilePage(),));
+                Navigator.of(context).pop(); // Tutup dialog
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => EditProfilePage()),
+                );
               },
               child: const Text(
                 'Lengkapi Profil',
@@ -1163,7 +1368,7 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                                         borderRadius: BorderRadius.circular(12),
                                         child: dokter['foto_dokter'] != null
                                             ? Image.network(
-                                                'http://10.227.74.71:8000/storage/${dokter['foto_dokter']}',
+                                                'http://192.168.1.4:8000/storage/${dokter['foto_dokter']}',
                                                 fit: BoxFit.cover,
                                                 errorBuilder:
                                                     (
@@ -1291,7 +1496,7 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
 
                                   const SizedBox(height: 16),
 
-                                  // UPDATED: Jadwal Tersedia dengan Klik Langsung
+                                  // Jadwal Tersedia dengan Klik Langsung
                                   const Text(
                                     'Jadwal Tersedia - Pilih Salah Satu',
                                     style: TextStyle(
@@ -1332,8 +1537,6 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                                           formatTanggalIndonesia(
                                             tanggalTerdekat,
                                           );
-
-                                      // ... rest of UI code
 
                                       final isSelected =
                                           selectedJadwal[dokterId] == jadwal;
@@ -1396,6 +1599,7 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                                                 ),
                                                 const SizedBox(width: 12),
                                                 Expanded(
+                                                  flex: 4,
                                                   child: Column(
                                                     crossAxisAlignment:
                                                         CrossAxisAlignment
@@ -1420,25 +1624,28 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                                                           const SizedBox(
                                                             width: 6,
                                                           ),
-                                                          Text(
-                                                            '$hari, $tanggalFormatted',
-                                                            style: TextStyle(
-                                                              fontSize: 14,
-                                                              fontWeight:
-                                                                  isSelected
-                                                                  ? FontWeight
-                                                                        .w700
-                                                                  : FontWeight
-                                                                        .w600,
-                                                              color: isSelected
-                                                                  ? const Color(
-                                                                      0xFF00897B,
-                                                                    )
-                                                                  : const Color(
-                                                                      0xFF00897B,
-                                                                    ).withOpacity(
-                                                                      0.8,
-                                                                    ),
+                                                          Expanded(
+                                                            child: Text(
+                                                              '$hari, $tanggalFormatted',
+                                                              style: TextStyle(
+                                                                fontSize: 14,
+                                                                fontWeight:
+                                                                    isSelected
+                                                                    ? FontWeight
+                                                                          .w700
+                                                                    : FontWeight
+                                                                          .w600,
+                                                                color: isSelected
+                                                                    ? const Color(
+                                                                        0xFF00897B,
+                                                                      )
+                                                                    : const Color(
+                                                                        0xFF00897B,
+                                                                      ).withOpacity(
+                                                                        0.8,
+                                                                      ),
+                                                              ),
+                                                              overflow: TextOverflow.ellipsis,
                                                             ),
                                                           ),
                                                         ],
@@ -1460,23 +1667,26 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                                                           const SizedBox(
                                                             width: 6,
                                                           ),
-                                                          Text(
-                                                            '${jadwal['jam_awal']} - ${jadwal['jam_selesai']}',
-                                                            style: TextStyle(
-                                                              fontSize: 13,
-                                                              fontWeight:
-                                                                  isSelected
-                                                                  ? FontWeight
-                                                                        .w500
-                                                                  : FontWeight
-                                                                        .normal,
-                                                              color: isSelected
-                                                                  ? Colors
-                                                                        .grey
-                                                                        .shade700
-                                                                  : Colors
-                                                                        .grey
-                                                                        .shade600,
+                                                          Expanded(
+                                                            child: Text(
+                                                              '${jadwal['jam_awal']} - ${jadwal['jam_selesai']}',
+                                                              style: TextStyle(
+                                                                fontSize: 13,
+                                                                fontWeight:
+                                                                    isSelected
+                                                                    ? FontWeight
+                                                                          .w500
+                                                                    : FontWeight
+                                                                          .normal,
+                                                                color: isSelected
+                                                                    ? Colors
+                                                                          .grey
+                                                                          .shade700
+                                                                    : Colors
+                                                                          .grey
+                                                                          .shade600,
+                                                              ),
+                                                              overflow: TextOverflow.ellipsis,
                                                             ),
                                                           ),
                                                         ],
@@ -1484,7 +1694,8 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                                                     ],
                                                   ),
                                                 ),
-                                                if (isSelected)
+                                                if (isSelected) ...[
+                                                  const SizedBox(width: 8),
                                                   AnimatedScale(
                                                     scale: isSelected
                                                         ? 1.0
@@ -1512,6 +1723,7 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                                                       ),
                                                     ),
                                                   ),
+                                                ],
                                               ],
                                             ),
                                           ),
@@ -1586,6 +1798,8 @@ bool _isWithinWorkingHours(DateTime now, String jamAwal, String jamSelesai) {
                                                       fontWeight:
                                                           FontWeight.w700,
                                                     ),
+                                                    overflow: TextOverflow.ellipsis,
+                                                    maxLines: 2,
                                                   ),
                                                 ],
                                               ),

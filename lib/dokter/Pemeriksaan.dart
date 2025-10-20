@@ -35,6 +35,9 @@ class _PemeriksaanState extends State<Pemeriksaan> {
   final _searchObatController = TextEditingController();
   String _searchObatQuery = '';
   String _riwayatDiagnosisOtomatis = '';
+  String formatTanggalForAPI(DateTime tanggal) {
+    return "${tanggal.year}-${tanggal.month.toString().padLeft(2, '0')}-${tanggal.day.toString().padLeft(2, '0')}";
+  }
 
   // Layanan related
   List<Map<String, dynamic>> _availableLayanan = [];
@@ -44,7 +47,7 @@ class _PemeriksaanState extends State<Pemeriksaan> {
   String _searchLayananQuery = '';
 
   // API Configuration
-  static const String baseUrl = 'http://10.227.74.71:8000/api';
+  static const String baseUrl = 'http://192.168.1.4:8000/api';
   String? _authToken;
 
   @override
@@ -56,11 +59,66 @@ class _PemeriksaanState extends State<Pemeriksaan> {
   Future<void> _initializeData() async {
     await _getAuthToken();
     await Future.wait([
+      _loadKunjunganData(), // 🔥 Tambah ini
       _loadAvailableObat(),
       _loadAvailableLayanan(),
-      _loadRiwayatDiagnosis(), // 🔥 TAMBAHKAN INI
+      _loadRiwayatDiagnosis(),
     ]);
     _fillInitialData();
+  }
+
+  Future<void> _loadKunjunganData() async {
+    if (!mounted) return;
+
+    try {
+      final token = await getToken();
+      final kunjunganId = widget.kunjunganData['id'];
+
+      if (kunjunganId == null) {
+        print('⚠️ Kunjungan ID not found');
+        return;
+      }
+
+      print('🔍 Loading kunjungan data for ID: $kunjunganId');
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/dokter/get-data-kunjungan/$kunjunganId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      print('📡 Kunjungan response: ${response.statusCode}');
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true && data['data'] != null) {
+          final kunjunganData = data['data'];
+
+          setState(() {
+            // Update tanggal dari database (real-time)
+            widget.kunjunganData['tanggal_kunjungan'] =
+                kunjunganData['tanggal_kunjungan'];
+            widget.kunjunganData['keluhan_awal'] =
+                kunjunganData['keluhan_awal'];
+            widget.kunjunganData['no_antrian'] = kunjunganData['no_antrian'];
+            // Update field lainnya yang diperlukan
+          });
+
+          _fillInitialData();
+          print(
+            '✅ Kunjungan data loaded: ${kunjunganData['tanggal_kunjungan']}',
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Error loading kunjungan data: $e');
+    }
   }
 
   Future<String?> getToken() async {
@@ -1469,10 +1527,11 @@ class _PemeriksaanState extends State<Pemeriksaan> {
                         _buildTextFormField(
                           controller: _riwayatPenyakitDahuluController,
                           label: 'Riwayat Penyakit Dahulu',
-                          hint: 'Riwayat penyakit yang pernah dialami...',
-                          maxLines: 5, // Lebih tinggi untuk menampung list
-                          readOnly:
-                              false, // 🔥 Bisa diedit kalau dokter mau tambah manual
+                          hint: _riwayatDiagnosisOtomatis.isNotEmpty
+                              ? 'Riwayat telah diisi otomatis dari diagnosis sebelumnya, Anda dapat mengedit jika diperlukan'
+                              : 'Riwayat penyakit yang pernah dialami...',
+                          maxLines: 5,
+                          readOnly: false, // Tetap bisa diedit
                         ),
                         SizedBox(height: isSmallScreen ? 12 : 16),
                         _buildTextFormField(

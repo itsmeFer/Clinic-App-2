@@ -23,10 +23,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
   List<dynamic> kunjunganEngaged = [];
 
   // KPI yang dipakai
-  Map<String, int> statistik = {
-    'janji_hari_ini': 0,
-    'antrian_aktif': 0,
-  };
+  Map<String, int> statistik = {'janji_hari_ini': 0, 'antrian_aktif': 0};
 
   // ---------- Helpers ----------
   void setStateSafe(VoidCallback fn) {
@@ -46,20 +43,44 @@ class _DokterDashboardState extends State<DokterDashboard> {
     }
   }
 
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
+  DateTime _getNowInTimezone() {
+    return DateTime.now().toLocal();
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    final aLocal = a.toLocal();
+    final bLocal = b.toLocal();
+
+    return aLocal.year == bLocal.year &&
+        aLocal.month == bLocal.month &&
+        aLocal.day == bLocal.day;
+  }
 
   int _countAppointmentsToday() {
-    final now = DateTime.now();
+    final now = _getNowInTimezone();
     int count = 0;
+
     for (final k in kunjunganEngaged) {
       final raw = k['tanggal_kunjungan']?.toString();
       if (raw == null) continue;
+
       try {
-        final dt = DateTime.parse(raw);
-        if (_isSameDay(dt.toLocal(), now)) count++;
-      } catch (_) {}
+        DateTime dt;
+
+        if (raw.contains('T')) {
+          dt = DateTime.parse(raw).toLocal();
+        } else {
+          dt = DateTime.parse(raw + 'T00:00:00').toLocal();
+        }
+
+        if (_isSameDay(dt, now)) {
+          count++;
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
     }
+
     return count;
   }
 
@@ -113,7 +134,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (!mounted) return;
 
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/dokter/get-data-dokter'),
+        Uri.parse('http://192.168.1.4:8000/api/dokter/get-data-dokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -135,7 +156,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
         await _handleTokenExpired();
       }
     } catch (e) {
-      debugPrint('Error _loadDokterProfile: $e');
+      // Handle error silently
     }
   }
 
@@ -146,7 +167,9 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (token == null) return;
 
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/dokter/get-data-kunjungan-by-id-dokter'),
+        Uri.parse(
+          'http://192.168.1.4:8000/api/dokter/get-data-kunjungan-by-id-dokter',
+        ),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -158,8 +181,10 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
+          final List<dynamic> kunjunganList = (data['data'] as List?) ?? [];
+
           setStateSafe(() {
-            kunjunganEngaged = (data['data'] as List?) ?? [];
+            kunjunganEngaged = kunjunganList;
           });
         }
       } else if (response.statusCode == 401) {
@@ -168,16 +193,22 @@ class _DokterDashboardState extends State<DokterDashboard> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memuat data: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Gagal memuat data: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
 
   void _calculateStatistik() {
+    final appointmentsToday = _countAppointmentsToday();
+    final activeQueue = kunjunganEngaged.length;
+
     setStateSafe(() {
       statistik = {
-        'janji_hari_ini': _countAppointmentsToday(),
-        'antrian_aktif': kunjunganEngaged.length,
+        'janji_hari_ini': appointmentsToday,
+        'antrian_aktif': activeQueue,
       };
     });
   }
@@ -205,7 +236,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (!mounted) return;
 
       await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/logout'),
+        Uri.parse('http://192.168.1.4:8000/api/logout'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -213,7 +244,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
         },
       );
     } catch (e) {
-      debugPrint('Error logout: $e');
+      // Handle error silently
     } finally {
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
@@ -230,35 +261,42 @@ class _DokterDashboardState extends State<DokterDashboard> {
     return await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
-            title: Text('Konfirmasi', style: TextStyle(fontSize: isSmall ? 16 : 18)),
-            content: Text('Apakah Anda yakin ingin keluar?', style: TextStyle(fontSize: isSmall ? 14 : 16)),
+            title: Text(
+              'Konfirmasi',
+              style: TextStyle(fontSize: isSmall ? 16 : 18),
+            ),
+            content: Text(
+              'Apakah Anda yakin ingin keluar?',
+              style: TextStyle(fontSize: isSmall ? 14 : 16),
+            ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
-              TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Ya')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Ya'),
+              ),
             ],
           ),
         ) ??
         false;
   }
 
-  // Method baru untuk handle completion dari pemeriksaan
   void _onPemeriksaanCompleted(int kunjunganId) {
-    // Hapus pasien dari list lokal terlebih dahulu untuk responsivitas
     setStateSafe(() {
       kunjunganEngaged.removeWhere((k) => k['id'] == kunjunganId);
     });
-    
-    // Update statistik
+
     _calculateStatistik();
-    
-    // Optional: refresh data dari server setelah delay singkat
+
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
         _loadKunjunganEngaged();
       }
     });
-    
-    // Tampilkan notifikasi sukses
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Pemeriksaan telah diselesaikan'),
@@ -280,145 +318,135 @@ class _DokterDashboardState extends State<DokterDashboard> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
-              ? _ErrorState(message: errorMessage!, onRetry: _loadDashboardData)
-              : RefreshIndicator(
-                  onRefresh: _loadDashboardData,
-                  child: LayoutBuilder(
-                    builder: (context, c) {
-                      final w = c.maxWidth;
+          ? _ErrorState(message: errorMessage!, onRetry: _loadDashboardData)
+          : RefreshIndicator(
+              onRefresh: _loadDashboardData,
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  final w = c.maxWidth;
 
-                      // Breakpoints
-                      final isPhoneSmall = w < 360;
-                      final isPhone = w < 600;
-                      final isTablet = w >= 600 && w < 900;
-                      final isWide = w >= 900;
+                  // Breakpoints
+                  final isPhoneSmall = w < 360;
+                  final isPhone = w < 600;
+                  final isTablet = w >= 600 && w < 900;
+                  final isWide = w >= 900;
 
-                      // Grid statistik adaptif (2 kartu)
-                      int statCols = 2;
-                      double statHeight;
-                      if (isPhoneSmall) {
-                        statHeight = 132;
-                      } else if (isPhone) {
-                        statHeight = 120;
-                      } else if (isTablet) {
-                        statHeight = 110;
-                      } else {
-                        statHeight = 108;
-                      }
+                  // Grid statistik adaptif (2 kartu)
+                  int statCols = 2;
+                  double statHeight;
+                  if (isPhoneSmall) {
+                    statHeight = 132;
+                  } else if (isPhone) {
+                    statHeight = 120;
+                  } else if (isTablet) {
+                    statHeight = 110;
+                  } else {
+                    statHeight = 108;
+                  }
 
-                      final padding = EdgeInsets.symmetric(
-                        horizontal: isPhoneSmall ? 12 : 16,
-                        vertical: isPhoneSmall ? 10 : 12,
-                      );
+                  final padding = EdgeInsets.symmetric(
+                    horizontal: isPhoneSmall ? 12 : 16,
+                    vertical: isPhoneSmall ? 10 : 12,
+                  );
 
-                      // ==== SUSUN SEMUA KONTEN SEBAGAI ANAK-ANAK LISTVIEW ====
-                      final List<Widget> items = [];
+                  final List<Widget> items = [];
 
-                      if (dokterData != null) {
-                        items.add(_WelcomeCard(dokter: dokterData!, onEdit: _goEditProfile));
-                        items.add(SizedBox(height: isPhone ? 16 : 20));
-                      }
+                  if (dokterData != null) {
+                    items.add(
+                      _WelcomeCard(dokter: dokterData!, onEdit: _goEditProfile),
+                    );
+                    items.add(SizedBox(height: isPhone ? 16 : 20));
+                  }
 
-                      // Ringkasan (2 kartu KPI)
+                  items.add(
+                    Text(
+                      'Ringkasan',
+                      style: TextStyle(
+                        fontSize: isPhone ? 16 : 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                  items.add(const SizedBox(height: 10));
+
+                  items.add(_StatisticsChart(statistik: statistik));
+
+                  items.add(SizedBox(height: isPhone ? 18 : 22));
+
+                  items.add(
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: w * 0.7),
+                          child: Text(
+                            'Pasien Sedang Ditangani',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: isPhone ? 16 : 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        _ChipInfo(
+                          text: '${kunjunganEngaged.length} pasien',
+                          color: Colors.green,
+                        ),
+                      ],
+                    ),
+                  );
+                  items.add(const SizedBox(height: 10));
+
+                  if (kunjunganEngaged.isEmpty) {
+                    items.add(
+                      const _EmptyCard(
+                        icon: Icons.medical_services_outlined,
+                        title: 'Tidak ada pasien yang sedang ditangani',
+                        subtitle:
+                            'Pasien akan muncul di sini setelah status menjadi "Engaged".',
+                      ),
+                    );
+                  } else {
+                    for (var i = 0; i < kunjunganEngaged.length; i++) {
                       items.add(
-                        Text(
-                          'Ringkasan',
-                          style: TextStyle(fontSize: isPhone ? 16 : 18, fontWeight: FontWeight.w700),
+                        _PatientCard(
+                          data: kunjunganEngaged[i],
+                          onOpen: () =>
+                              _navigateToPemeriksaan(kunjunganEngaged[i]),
                         ),
                       );
-                      items.add(const SizedBox(height: 10));
-
-                      items.add(
-                        _AdaptiveGrid(
-                          crossAxisCount: statCols,
-                          spacing: isPhone ? 10 : 12,
-                          mainAxisExtent: statHeight,
-                          children: [
-                            _StatCard(
-                              title: 'Janji Hari Ini',
-                              value: statistik['janji_hari_ini'] ?? 0,
-                              color: Colors.teal,
-                              icon: Icons.event_available,
-                            ),
-                            _StatCard(
-                              title: 'Antrian Aktif',
-                              value: statistik['antrian_aktif'] ?? 0,
-                              color: Colors.green,
-                              icon: Icons.people_alt,
-                            ),
-                          ],
-                        ),
-                      );
-
-                      items.add(SizedBox(height: isPhone ? 18 : 22));
-
-                      // Header list pasien
-                      items.add(
-                        Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            ConstrainedBox(
-                              constraints: BoxConstraints(maxWidth: w * 0.7),
-                              child: Text(
-                                'Pasien Sedang Ditangani',
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: isPhone ? 16 : 18,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            _ChipInfo(text: '${kunjunganEngaged.length} pasien', color: Colors.green),
-                          ],
-                        ),
-                      );
-                      items.add(const SizedBox(height: 10));
-
-                      if (kunjunganEngaged.isEmpty) {
-                        items.add(const _EmptyCard(
-                          icon: Icons.medical_services_outlined,
-                          title: 'Tidak ada pasien yang sedang ditangani',
-                          subtitle: 'Pasien akan muncul di sini setelah status menjadi "Engaged".',
-                        ));
-                      } else {
-                        for (var i = 0; i < kunjunganEngaged.length; i++) {
-                          items.add(_PatientCard(
-                            data: kunjunganEngaged[i],
-                            onOpen: () => _navigateToPemeriksaan(kunjunganEngaged[i]),
-                          ));
-                          if (i != kunjunganEngaged.length - 1) {
-                            items.add(const SizedBox(height: 10));
-                          }
-                        }
+                      if (i != kunjunganEngaged.length - 1) {
+                        items.add(const SizedBox(height: 10));
                       }
+                    }
+                  }
 
-                      items.add(const SizedBox(height: 80));
+                  items.add(const SizedBox(height: 80));
 
-                      // ==== ListView utama (SATU scrollable) ====
-                      return ListView(
-                        padding: padding,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: items,
-                      );
-                    },
-                  ),
-                ),
+                  return ListView(
+                    padding: padding,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: items,
+                  );
+                },
+              ),
+            ),
     );
   }
 
-  // Method untuk navigasi ke pemeriksaan dengan callback
-  Future<void> _navigateToPemeriksaan(Map<String, dynamic> kunjunganData) async {
+  Future<void> _navigateToPemeriksaan(
+    Map<String, dynamic> kunjunganData,
+  ) async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => Medical.Pemeriksaan(kunjunganData: kunjunganData),
       ),
     );
-    
-    // Jika pemeriksaan selesai (result berisi info completion)
+
     if (result != null && result is Map) {
       if (result['completed'] == true) {
         final kunjunganId = kunjunganData['id'];
@@ -426,10 +454,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
           _onPemeriksaanCompleted(kunjunganId);
         }
       }
-    }
-    
-    // Atau jika result adalah true (pemeriksaan selesai)
-    else if (result == true) {
+    } else if (result == true) {
       final kunjunganId = kunjunganData['id'];
       if (kunjunganId != null) {
         _onPemeriksaanCompleted(kunjunganId);
@@ -455,10 +480,20 @@ class _DokterDashboardState extends State<DokterDashboard> {
       title: Row(
         children: [
           const SizedBox(width: 16),
-          const Icon(Icons.local_hospital, color: Colors.white),
+          CircleAvatar(
+            radius: isSmall ? 16 : 18,
+            backgroundColor: Colors.white,
+            backgroundImage: AssetImage("assets/gambar/logo.png"),
+          ),
+
           const SizedBox(width: 10),
-          Text('Dashboard Dokter',
-              style: TextStyle(fontSize: isSmall ? 16 : 18, fontWeight: FontWeight.w600)),
+          Text(
+            'Dashboard Dokter',
+            style: TextStyle(
+              fontSize: isSmall ? 16 : 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
       foregroundColor: Colors.white,
@@ -466,8 +501,10 @@ class _DokterDashboardState extends State<DokterDashboard> {
         IconButton(
           tooltip: 'Riwayat Pasien',
           icon: Icon(Icons.history, size: isSmall ? 20 : 24),
-          onPressed: () =>
-              Navigator.push(context, MaterialPageRoute(builder: (_) => RiwayatPasienPage())),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => RiwayatPasienPage()),
+          ),
         ),
         IconButton(
           tooltip: 'Refresh',
@@ -515,7 +552,7 @@ class _WelcomeCard extends StatelessWidget {
     final isSmall = MediaQuery.of(context).size.width < 400;
     final foto = dokter['foto_dokter'];
     final nama = dokter['nama_dokter'] ?? 'Dokter';
-    final spesialis = dokter['jenis_spesialis']?['nama_spesialis'] ?? 'Umum';
+    final spesialis = dokter['poli']?['nama_poli'] ?? 'Umum';
 
     return Card(
       elevation: 3,
@@ -537,9 +574,15 @@ class _WelcomeCard extends StatelessWidget {
               backgroundColor: Colors.white,
               child: ClipOval(
                 child: SafeNetworkImage(
-                  url: (foto != null) ? 'http://10.227.74.71:8000/storage/$foto' : null,
+                  url: (foto != null)
+                      ? 'http://192.168.1.4:8000/storage/$foto'
+                      : null,
                   size: (isSmall ? 52 : 60),
-                  fallback: Icon(Icons.person, color: Colors.teal, size: isSmall ? 26 : 30),
+                  fallback: Icon(
+                    Icons.person,
+                    color: Colors.teal,
+                    size: isSmall ? 26 : 30,
+                  ),
                 ),
               ),
             ),
@@ -548,23 +591,42 @@ class _WelcomeCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Selamat Datang,',
-                      style: TextStyle(color: Colors.white70, fontSize: isSmall ? 12 : 13)),
-                  Text('Dr. $nama',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: Colors.white, fontSize: isSmall ? 16 : 18, fontWeight: FontWeight.w700)),
-                  Text(spesialis,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.white70, fontSize: isSmall ? 12 : 13)),
+                  Text(
+                    'Selamat Datang,',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: isSmall ? 12 : 13,
+                    ),
+                  ),
+                  Text(
+                    'Dr. $nama',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: isSmall ? 16 : 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    spesialis,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: isSmall ? 12 : 13,
+                    ),
+                  ),
                 ],
               ),
             ),
             IconButton(
               onPressed: onEdit,
-              icon: Icon(Icons.edit, color: Colors.white, size: isSmall ? 20 : 24),
+              icon: Icon(
+                Icons.edit,
+                color: Colors.white,
+                size: isSmall ? 20 : 24,
+              ),
               tooltip: 'Edit Profil',
             ),
           ],
@@ -574,92 +636,260 @@ class _WelcomeCard extends StatelessWidget {
   }
 }
 
-class _AdaptiveGrid extends StatelessWidget {
-  final int crossAxisCount;
-  final double spacing;
-  final List<Widget> children;
+class _StatisticsChart extends StatelessWidget {
+  final Map<String, int> statistik;
 
-  /// Tinggi tetap per kartu di sumbu utama (vertikal).
-  final double mainAxisExtent;
-
-  const _AdaptiveGrid({
-    required this.crossAxisCount,
-    required this.spacing,
-    required this.children,
-    required this.mainAxisExtent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: spacing,
-        mainAxisSpacing: spacing,
-        mainAxisExtent: mainAxisExtent, // kunci anti overflow
-      ),
-      children: children,
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String title;
-  final int value;
-  final Color color;
-  final IconData icon;
-
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.color,
-    required this.icon,
-  });
+  const _StatisticsChart({required this.statistik});
 
   @override
   Widget build(BuildContext context) {
     final isSmall = MediaQuery.of(context).size.width < 400;
+    final janjiHariIni = statistik['janji_hari_ini'] ?? 0;
+    final antrianAktif = statistik['antrian_aktif'] ?? 0;
+    final total = janjiHariIni + antrianAktif;
+
     return Card(
-      elevation: 2,
+      elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 84), // tinggi minimal
-        child: Padding(
-          padding: EdgeInsets.all(isSmall ? 12 : 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min, // jangan paksa tinggi
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, color: color, size: isSmall ? 20 : 24),
-                  const Spacer(),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      '$value',
-                      style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: isSmall ? 20 : 24),
-                    ),
+      child: Container(
+        padding: EdgeInsets.all(isSmall ? 16 : 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Statistik Hari Ini',
+              style: TextStyle(
+                fontSize: isSmall ? 16 : 18,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey[800],
+              ),
+            ),
+            SizedBox(height: isSmall ? 16 : 20),
+
+            // Bar Chart Simple
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    children: [
+                      _buildBarChart(
+                        'Janji Hari Ini',
+                        janjiHariIni,
+                        total > 0 ? janjiHariIni / total : 0,
+                        Colors.teal,
+                        isSmall,
+                      ),
+                      SizedBox(height: isSmall ? 12 : 16),
+                      _buildBarChart(
+                        'Antrian Aktif',
+                        antrianAktif,
+                        total > 0 ? antrianAktif / total : 0,
+                        Colors.green,
+                        isSmall,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              SizedBox(height: isSmall ? 6 : 8),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: isSmall ? 12 : 13.5),
                 ),
-              ),
-            ],
-          ),
+                SizedBox(width: isSmall ? 16 : 20),
+
+                // Circular Progress
+                Expanded(
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: isSmall ? 80 : 100,
+                        height: isSmall ? 80 : 100,
+                        child: Stack(
+                          children: [
+                            // Background circle
+                            Container(
+                              width: double.infinity,
+                              height: double.infinity,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.grey[200]!,
+                                  width: 8,
+                                ),
+                              ),
+                            ),
+
+                            // Progress circles
+                            if (total > 0) ...[
+                              // Teal progress
+                              CircularProgressIndicator(
+                                value: janjiHariIni / total,
+                                backgroundColor: Colors.transparent,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.teal,
+                                ),
+                                strokeWidth: 8,
+                              ),
+
+                              // Green progress (offset)
+                              Transform.rotate(
+                                angle: (janjiHariIni / total) * 2 * 3.14159,
+                                child: CircularProgressIndicator(
+                                  value: antrianAktif / total,
+                                  backgroundColor: Colors.transparent,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.green,
+                                  ),
+                                  strokeWidth: 8,
+                                ),
+                              ),
+                            ],
+
+                            // Center text
+                            Center(
+                              child: Text(
+                                '$total',
+                                style: TextStyle(
+                                  fontSize: isSmall ? 18 : 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: isSmall ? 8 : 12),
+                      Text(
+                        'Total',
+                        style: TextStyle(
+                          fontSize: isSmall ? 12 : 14,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            SizedBox(height: isSmall ? 16 : 20),
+
+            // Legend
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildLegend(
+                  'Janji Hari Ini',
+                  Colors.teal,
+                  janjiHariIni,
+                  isSmall,
+                ),
+                _buildLegend(
+                  'Antrian Aktif',
+                  Colors.green,
+                  antrianAktif,
+                  isSmall,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBarChart(
+    String label,
+    int value,
+    double percentage,
+    Color color,
+    bool isSmall,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 2,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: isSmall ? 12 : 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[700],
+            ),
+          ),
+        ),
+        SizedBox(width: isSmall ? 8 : 12),
+        Expanded(
+          flex: 3,
+          child: Container(
+            height: isSmall ? 20 : 24,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.grey[200],
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: percentage.clamp(0.0, 1.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: LinearGradient(
+                    colors: [color, color.withOpacity(0.7)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: isSmall ? 8 : 12),
+        SizedBox(
+          width: isSmall ? 20 : 24,
+          child: Text(
+            '$value',
+            style: TextStyle(
+              fontSize: isSmall ? 12 : 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegend(String label, Color color, int value, bool isSmall) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: isSmall ? 12 : 16,
+          height: isSmall ? 12 : 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        SizedBox(width: isSmall ? 6 : 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: isSmall ? 10 : 12,
+                color: Colors.grey[600],
+              ),
+            ),
+            Text(
+              '$value',
+              style: TextStyle(
+                fontSize: isSmall ? 12 : 14,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -682,9 +912,12 @@ class _ChipInfo extends StatelessWidget {
     final isSmall = MediaQuery.of(context).size.width < 400;
     final textColor = _derive700(color);
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 220), // cegah overflow kanan
+      constraints: const BoxConstraints(maxWidth: 220),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: isSmall ? 8 : 10, vertical: isSmall ? 4 : 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmall ? 8 : 10,
+          vertical: isSmall ? 4 : 6,
+        ),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
@@ -726,12 +959,19 @@ class _EmptyCard extends StatelessWidget {
           children: [
             Icon(icon, size: isSmall ? 42 : 48, color: Colors.grey.shade400),
             SizedBox(height: isSmall ? 10 : 12),
-            Text(title, textAlign: TextAlign.center, style: TextStyle(fontSize: isSmall ? 14 : 16)),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: isSmall ? 14 : 16),
+            ),
             SizedBox(height: isSmall ? 6 : 8),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: isSmall ? 12 : 13, color: Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: isSmall ? 12 : 13,
+                color: Colors.grey.shade600,
+              ),
             ),
           ],
         ),
@@ -749,19 +989,32 @@ class _PatientCard extends StatelessWidget {
   String formatDate(String? raw) {
     if (raw == null) return '-';
     try {
-      final dt = DateTime.parse(raw);
+      DateTime dt;
+
+      if (raw.contains('T')) {
+        dt = DateTime.parse(raw).toLocal();
+      } else {
+        dt = DateTime.parse(raw + 'T00:00:00').toLocal();
+      }
+
       return DateFormat('dd MMMM yyyy', 'id_ID').format(dt);
-    } catch (_) {
-      return raw; // fallback kalau gagal parse
+    } catch (e) {
+      return raw;
     }
   }
 
   String? formatTime(String? raw) {
     if (raw == null) return null;
     try {
-      final dt = DateTime.parse(raw);
-      return DateFormat.Hm().format(dt); // HH:mm
-    } catch (_) {
+      DateTime dt;
+      if (raw.contains('T')) {
+        dt = DateTime.parse(raw).toLocal();
+      } else {
+        dt = DateTime.parse(raw + 'T00:00:00').toLocal();
+      }
+
+      return DateFormat.Hm().format(dt);
+    } catch (e) {
       return null;
     }
   }
@@ -777,12 +1030,20 @@ class _PatientCard extends StatelessWidget {
     final tgl = formatDate(data['tanggal_kunjungan']?.toString());
     final jam = formatTime(data['created_at']?.toString());
 
-    Widget _badge(String text, {Color? color, Color? border, Color? textColor}) {
+    Widget _badge(
+      String text, {
+      Color? color,
+      Color? border,
+      Color? textColor,
+    }) {
       final c = color ?? Colors.blue.shade50;
       final b = border ?? Colors.blue.shade200;
       final t = textColor ?? Colors.blue.shade700;
       return Container(
-        padding: EdgeInsets.symmetric(horizontal: isSmall ? 8 : 10, vertical: 4),
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmall ? 8 : 10,
+          vertical: 4,
+        ),
         decoration: BoxDecoration(
           color: c,
           borderRadius: BorderRadius.circular(12),
@@ -790,7 +1051,11 @@ class _PatientCard extends StatelessWidget {
         ),
         child: Text(
           text,
-          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: t),
+          style: TextStyle(
+            fontSize: isSmall ? 11 : 12,
+            fontWeight: FontWeight.w700,
+            color: t,
+          ),
         ),
       );
     }
@@ -803,7 +1068,6 @@ class _PatientCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top row -> pakai Wrap supaya anti overflow
             Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -822,17 +1086,25 @@ class _PatientCard extends StatelessWidget {
 
             SizedBox(height: isSmall ? 8 : 10),
 
-            Text(nama,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: isSmall ? 15 : 16.5, fontWeight: FontWeight.w700)),
+            Text(
+              nama,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: isSmall ? 15 : 16.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text('Keluhan: $keluhan',
-                maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey.shade700)),
+            Text(
+              'Keluhan: $keluhan',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
 
             SizedBox(height: isSmall ? 8 : 10),
 
-            // Info
             Container(
               width: double.infinity,
               padding: EdgeInsets.all(isSmall ? 8 : 10),
@@ -841,11 +1113,17 @@ class _PatientCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: DefaultTextStyle(
-                style: TextStyle(fontSize: isSmall ? 11.5 : 12.5, color: Colors.grey.shade700),
+                style: TextStyle(
+                  fontSize: isSmall ? 11.5 : 12.5,
+                  color: Colors.grey.shade700,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Info Pasien:', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Text(
+                      'Info Pasien:',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     const SizedBox(height: 4),
                     Text('Tanggal Kunjungan: $tgl'),
                     if (jam != null) Text('Waktu Daftar: $jam'),
@@ -861,12 +1139,17 @@ class _PatientCard extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: onOpen,
                 icon: Icon(Icons.medical_information, size: isSmall ? 16 : 18),
-                label: Text('Lanjutkan Pemeriksaan', style: TextStyle(fontSize: isSmall ? 13 : 14)),
+                label: Text(
+                  'Lanjutkan Pemeriksaan',
+                  style: TextStyle(fontSize: isSmall ? 13 : 14),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
                   padding: EdgeInsets.symmetric(vertical: isSmall ? 10 : 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   elevation: 0,
                 ),
               ),
@@ -883,12 +1166,21 @@ class SafeNetworkImage extends StatelessWidget {
   final double size;
   final Widget? fallback;
 
-  const SafeNetworkImage({super.key, required this.url, required this.size, this.fallback});
+  const SafeNetworkImage({
+    super.key,
+    required this.url,
+    required this.size,
+    this.fallback,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (url == null || url!.trim().isEmpty) {
-      return SizedBox(width: size, height: size, child: Center(child: fallback ?? const Icon(Icons.image)));
+      return SizedBox(
+        width: size,
+        height: size,
+        child: Center(child: fallback ?? const Icon(Icons.image)),
+      );
     }
     return Image.network(
       url!,
@@ -933,9 +1225,17 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, size: isSmall ? 48 : 64, color: Colors.red.shade300),
+            Icon(
+              Icons.error_outline,
+              size: isSmall ? 48 : 64,
+              color: Colors.red.shade300,
+            ),
             SizedBox(height: isSmall ? 12 : 16),
-            Text(message, textAlign: TextAlign.center, style: TextStyle(fontSize: isSmall ? 14 : 16)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: isSmall ? 14 : 16),
+            ),
             SizedBox(height: isSmall ? 12 : 16),
             ElevatedButton(onPressed: onRetry, child: const Text('Coba Lagi')),
           ],

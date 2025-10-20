@@ -1,17 +1,20 @@
 import 'dart:convert';
+import 'package:RoyalClinic/pasien/PesanJadwal.dart';
 import 'package:RoyalClinic/pasien/dashboardScreen.dart';
+import 'package:RoyalClinic/pasien/edit_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-class RiwayatKunjungan extends StatefulWidget {
-  const RiwayatKunjungan({Key? key}) : super(key: key);
+// UPDATED: Create a version without bottom navigation for use in MainWrapper
+class RiwayatKunjunganPage extends StatefulWidget {
+  const RiwayatKunjunganPage({Key? key}) : super(key: key);
 
   @override
-  State<RiwayatKunjungan> createState() => _RiwayatKunjunganState();
+  State<RiwayatKunjunganPage> createState() => _RiwayatKunjunganPageState();
 }
 
-class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
+class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
   bool isLoading = true;
   List<dynamic> riwayatList = [];
   Map<String, dynamic>? pasienInfo;
@@ -55,7 +58,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
       }
 
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/kunjungan/riwayat/$pasienId'),
+        Uri.parse('http://192.168.1.4:8000/api/kunjungan/riwayat/$pasienId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -111,7 +114,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
       print('Request Body: $requestBody');
 
       final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/kunjungan/batalkan'),
+        Uri.parse('http://192.168.1.4:8000/api/kunjungan/batalkan'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -376,7 +379,7 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
               borderRadius: BorderRadius.circular(9),
               child: pasienInfo!['foto_pasien'] != null
                   ? Image.network(
-                      'http://10.227.74.71:8000/storage/${pasienInfo!['foto_pasien']}',
+                      'http://192.168.1.4:8000/storage/${pasienInfo!['foto_pasien']}',
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return const Icon(
@@ -1068,684 +1071,871 @@ class _RiwayatKunjunganState extends State<RiwayatKunjungan> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        // Tambahkan leading icon
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            // Navigasi ke Dashboard dan hapus semua route sebelumnya
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const MainWrapper()),
-              (route) => false,
-            );
-          },
-          tooltip: 'Kembali ke Beranda',
-        ),
-        title: const Text(
-          'Riwayat Kunjungan',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              if (mounted) {
-                setState(() {
-                  isLoading = true;
-                  errorMessage = null;
-                });
-              }
-              fetchRiwayatKunjungan();
-            },
-          ),
-        ],
-      ),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00897B)),
-            )
-          : errorMessage != null
-          ? Container(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Colors.red.shade300,
-                      ),
+    return isLoading
+        ? const Center(
+            child: CircularProgressIndicator(color: Color(0xFF00897B)),
+          )
+        : errorMessage != null
+        ? Container(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(50),
                     ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Oops! Terjadi Kesalahan',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      errorMessage!,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (mounted) {
-                          setState(() {
-                            isLoading = true;
-                            errorMessage = null;
-                          });
-                        }
-                        fetchRiwayatKunjungan();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00897B),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'Coba Lagi',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : riwayatList.isEmpty
-          ? Column(
-              children: [
-                _buildPasienInfoCard(),
-                Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(50),
-                          ),
-                          child: Icon(
-                            Icons.history,
-                            size: 48,
-                            color: Colors.grey.shade400,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Belum Ada Riwayat',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Anda belum memiliki riwayat kunjungan',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
+                    child: Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red.shade300,
                     ),
                   ),
-                ),
-              ],
-            )
-          : RefreshIndicator(
-              onRefresh: fetchRiwayatKunjungan,
-              color: const Color(0xFF00897B),
-              child: ListView(
-                children: [
-                  _buildPasienInfoCard(),
-
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemCount: riwayatList.length,
-                    itemBuilder: (context, index) {
-                      final kunjungan = riwayatList[index];
-                      final dokter = kunjungan['dokter'];
-                      final status = kunjungan['status'] ?? '';
-                      final hasEMR = kunjungan['emr'] != null;
-                      final hasPrescription =
-                          kunjungan['resep_obat'] != null &&
-                          kunjungan['resep_obat'].isNotEmpty;
-                      final payment = kunjungan['pembayaran'];
-
-                      final canCancel = [
-                        'pending',
-                        'waiting',
-                      ].contains(status.toLowerCase());
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Oops! Terjadi Kesalahan',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    errorMessage!,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (mounted) {
+                        setState(() {
+                          isLoading = true;
+                          errorMessage = null;
+                        });
+                      }
+                      fetchRiwayatKunjungan();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00897B),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Coba Lagi',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : riwayatList.isEmpty
+        ? Column(
+            children: [
+              _buildPasienInfoCard(),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(50),
                         ),
-                        child: InkWell(
-                          onTap: () => showKunjunganDetail(kunjungan),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 60,
-                                      height: 60,
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFF00897B,
-                                        ).withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: dokter?['foto_dokter'] != null
-                                            ? Image.network(
-                                                'http://10.227.74.71:8000/storage/${dokter['foto_dokter']}',
-                                                fit: BoxFit.cover,
-                                                errorBuilder:
-                                                    (
-                                                      context,
-                                                      error,
-                                                      stackTrace,
-                                                    ) {
-                                                      return const Icon(
-                                                        Icons.person,
-                                                        size: 32,
-                                                        color: Color(
-                                                          0xFF00897B,
-                                                        ),
-                                                      );
-                                                    },
-                                              )
-                                            : const Icon(
-                                                Icons.person,
-                                                size: 32,
-                                                color: Color(0xFF00897B),
-                                              ),
+                        child: Icon(
+                          Icons.history,
+                          size: 48,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Belum Ada Riwayat',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Anda belum memiliki riwayat kunjungan',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          )
+        : RefreshIndicator(
+            onRefresh: fetchRiwayatKunjungan,
+            color: const Color(0xFF00897B),
+            child: ListView(
+              children: [
+                _buildPasienInfoCard(),
+
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: riwayatList.length,
+                  itemBuilder: (context, index) {
+                    final kunjungan = riwayatList[index];
+                    final dokter = kunjungan['dokter'];
+                    final status = kunjungan['status'] ?? '';
+                    final hasEMR = kunjungan['emr'] != null;
+                    final hasPrescription =
+                        kunjungan['resep_obat'] != null &&
+                        kunjungan['resep_obat'].isNotEmpty;
+                    final payment = kunjungan['pembayaran'];
+
+                    final canCancel = [
+                      'pending',
+                      'waiting',
+                    ].contains(status.toLowerCase());
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: InkWell(
+                        onTap: () => showKunjunganDetail(kunjungan),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF00897B,
+                                      ).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: dokter?['foto_dokter'] != null
+                                          ? Image.network(
+                                              'http://192.168.1.4:8000/storage/${dokter['foto_dokter']}',
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) {
+                                                    return const Icon(
+                                                      Icons.person,
+                                                      size: 32,
+                                                      color: Color(
+                                                        0xFF00897B,
+                                                      ),
+                                                    );
+                                                  },
+                                            )
+                                          : const Icon(
+                                              Icons.person,
+                                              size: 32,
+                                              color: Color(0xFF00897B),
+                                            ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          dokter?['nama_dokter'] ??
+                                              'Nama tidak tersedia',
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          formatDate(
+                                            kunjungan['tanggal_kunjungan'] ??
+                                                '',
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                        if (dokter?['spesialisasi'] !=
+                                            null) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Poli ${dokter['spesialisasi']}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: const Color(0xFF00897B),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: getStatusColor(
+                                        status,
+                                      ).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: getStatusColor(status),
+                                        width: 1,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            dokter?['nama_dokter'] ??
-                                                'Nama tidak tersedia',
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          getStatusIcon(status),
+                                          size: 14,
+                                          color: getStatusColor(status),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          getStatusText(status),
+                                          style: TextStyle(
+                                            color: getStatusColor(status),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.confirmation_number,
+                                          size: 16,
+                                          color: Color(0xFF00897B),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'No. Antrian: ${kunjungan['no_antrian'] ?? '-'}',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Icon(
+                                          Icons.medical_services,
+                                          size: 16,
+                                          color: Color(0xFF00897B),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Keluhan: ${kunjungan['keluhan_awal'] ?? '-'}',
                                             style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
                                               color: Colors.black87,
                                             ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            formatDate(
-                                              kunjungan['tanggal_kunjungan'] ??
-                                                  '',
-                                            ),
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.grey.shade600,
-                                            ),
-                                          ),
-                                          if (dokter?['spesialisasi'] !=
-                                              null) ...[
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              'Poli ${dokter['spesialisasi']}', // Tambahkan prefix "Poli"
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: const Color(0xFF00897B),
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: getStatusColor(
-                                          status,
-                                        ).withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: getStatusColor(status),
-                                          width: 1,
                                         ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            getStatusIcon(status),
-                                            size: 14,
-                                            color: getStatusColor(status),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            getStatusText(status),
-                                            style: TextStyle(
-                                              color: getStatusColor(status),
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
+                              ),
 
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.confirmation_number,
-                                            size: 16,
-                                            color: Color(0xFF00897B),
+                              // Additional info badges
+                              if (hasEMR ||
+                                  hasPrescription ||
+                                  payment != null) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    if (hasEMR)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade100,
+                                          borderRadius: BorderRadius.circular(
+                                            6,
                                           ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'No. Antrian: ${kunjungan['no_antrian'] ?? '-'}',
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.black87,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.medical_information,
+                                              size: 12,
+                                              color: Colors.blue.shade700,
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Icon(
-                                            Icons.medical_services,
-                                            size: 16,
-                                            color: Color(0xFF00897B),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              'Keluhan: ${kunjungan['keluhan_awal'] ?? '-'}',
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.black87,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                // Additional info badges
-                                if (hasEMR ||
-                                    hasPrescription ||
-                                    payment != null) ...[
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 6,
-                                    children: [
-                                      if (hasEMR)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue.shade100,
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.medical_information,
-                                                size: 12,
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'EMR',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
                                                 color: Colors.blue.shade700,
                                               ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'EMR',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.blue.shade700,
-                                                ),
-                                              ),
-                                            ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    if (hasPrescription)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.shade100,
+                                          borderRadius: BorderRadius.circular(
+                                            6,
                                           ),
                                         ),
-                                      if (hasPrescription)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.purple.shade100,
-                                            borderRadius: BorderRadius.circular(
-                                              6,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.medication,
+                                              size: 12,
+                                              color: Colors.purple.shade700,
                                             ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.medication,
-                                                size: 12,
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${kunjungan['resep_obat'].length} Obat',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
                                                 color: Colors.purple.shade700,
                                               ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '${kunjungan['resep_obat'].length} Obat',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.purple.shade700,
-                                                ),
-                                              ),
-                                            ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    if (payment != null)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              payment['status'] ==
+                                                  'Sudah Bayar'
+                                              ? Colors.green.shade100
+                                              : Colors.orange.shade100,
+                                          borderRadius: BorderRadius.circular(
+                                            6,
                                           ),
                                         ),
-                                      if (payment != null)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                payment['status'] ==
-                                                    'Sudah Bayar'
-                                                ? Colors.green.shade100
-                                                : Colors.orange.shade100,
-                                            borderRadius: BorderRadius.circular(
-                                              6,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              payment['status'] ==
+                                                      'Sudah Bayar'
+                                                  ? Icons.check_circle
+                                                  : Icons.payment,
+                                              size: 12,
+                                              color:
+                                                  payment['status'] ==
+                                                      'Sudah Bayar'
+                                                  ? Colors.green.shade700
+                                                  : Colors.orange.shade700,
                                             ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                payment['status'] ==
-                                                        'Sudah Bayar'
-                                                    ? Icons.check_circle
-                                                    : Icons.payment,
-                                                size: 12,
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              formatCurrency(
+                                                payment['total_tagihan'],
+                                              ),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
                                                 color:
                                                     payment['status'] ==
                                                         'Sudah Bayar'
                                                     ? Colors.green.shade700
                                                     : Colors.orange.shade700,
                                               ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                formatCurrency(
-                                                  payment['total_tagihan'],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+
+                              if (canCancel) ...[
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red.shade500,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          8,
+                                        ),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                          ),
+                                          title: Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(
+                                                  8,
                                                 ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.shade50,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        8,
+                                                      ),
+                                                ),
+                                                child: Icon(
+                                                  Icons.cancel,
+                                                  color: Colors.red.shade500,
+                                                  size: 24,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              const Text(
+                                                'Batalkan Kunjungan',
                                                 style: TextStyle(
-                                                  fontSize: 11,
+                                                  fontSize: 18,
                                                   fontWeight: FontWeight.w600,
-                                                  color:
-                                                      payment['status'] ==
-                                                          'Sudah Bayar'
-                                                      ? Colors.green.shade700
-                                                      : Colors.orange.shade700,
                                                 ),
                                               ),
                                             ],
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                ],
-
-                                if (canCancel) ...[
-                                  const SizedBox(height: 12),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red.shade500,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        elevation: 0,
-                                      ),
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (context) => AlertDialog(
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
+                                          content: Text(
+                                            'Apakah Anda yakin ingin membatalkan kunjungan dengan Dr. ${dokter?['nama_dokter'] ?? 'Dokter'} pada ${formatDate(kunjungan['tanggal_kunjungan'] ?? '')}?',
+                                            style: const TextStyle(
+                                              fontSize: 14,
                                             ),
-                                            title: Row(
+                                          ),
+                                          actions: [
+                                            Row(
                                               children: [
-                                                Container(
-                                                  padding: const EdgeInsets.all(
-                                                    8,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.red.shade50,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
+                                                Expanded(
+                                                  child: TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                          context,
                                                         ),
-                                                  ),
-                                                  child: Icon(
-                                                    Icons.cancel,
-                                                    color: Colors.red.shade500,
-                                                    size: 24,
+                                                    style: TextButton.styleFrom(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 12,
+                                                          ),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                        side: BorderSide(
+                                                          color: Colors
+                                                              .grey
+                                                              .shade300,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    child: const Text(
+                                                      'Tidak',
+                                                      style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors.black87,
+                                                      ),
+                                                    ),
                                                   ),
                                                 ),
                                                 const SizedBox(width: 12),
-                                                const Text(
-                                                  'Batalkan Kunjungan',
-                                                  style: TextStyle(
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.w600,
+                                                Expanded(
+                                                  child: ElevatedButton(
+                                                    onPressed: () {
+                                                      Navigator.pop(context);
+                                                      batalkanKunjungan(
+                                                        kunjungan['id'],
+                                                      );
+                                                    },
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor:
+                                                          Colors.red.shade500,
+                                                      foregroundColor:
+                                                          Colors.white,
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 12,
+                                                          ),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                      ),
+                                                      elevation: 0,
+                                                    ),
+                                                    child: const Text(
+                                                      'Ya, Batalkan',
+                                                      style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                    ),
                                                   ),
                                                 ),
                                               ],
                                             ),
-                                            content: Text(
-                                              'Apakah Anda yakin ingin membatalkan kunjungan dengan Dr. ${dokter?['nama_dokter'] ?? 'Dokter'} pada ${formatDate(kunjungan['tanggal_kunjungan'] ?? '')}?',
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            actions: [
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: TextButton(
-                                                      onPressed: () =>
-                                                          Navigator.pop(
-                                                            context,
-                                                          ),
-                                                      style: TextButton.styleFrom(
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              vertical: 12,
-                                                            ),
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                          side: BorderSide(
-                                                            color: Colors
-                                                                .grey
-                                                                .shade300,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      child: const Text(
-                                                        'Tidak',
-                                                        style: TextStyle(
-                                                          fontSize: 15,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color: Colors.black87,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 12),
-                                                  Expanded(
-                                                    child: ElevatedButton(
-                                                      onPressed: () {
-                                                        Navigator.pop(context);
-                                                        batalkanKunjungan(
-                                                          kunjungan['id'],
-                                                        );
-                                                      },
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.red.shade500,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              vertical: 12,
-                                                            ),
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                        ),
-                                                        elevation: 0,
-                                                      ),
-                                                      child: const Text(
-                                                        'Ya, Batalkan',
-                                                        style: TextStyle(
-                                                          fontSize: 15,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                    child: const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.cancel, size: 18),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Batalkan Kunjungan',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
                                           ),
-                                        );
-                                      },
-                                      child: const Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.cancel, size: 18),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Batalkan Kunjungan',
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ],
+                                ),
                               ],
-                            ),
+                            ],
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ],
-              ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
+          );
+  }
+}
+
+// UPDATED: Original RiwayatKunjungan for standalone use (with bottom navigation)
+class RiwayatKunjungan extends StatelessWidget {
+  const RiwayatKunjungan({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        title: const Text('Riwayat Kunjungan'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
+      ),
+      body: const RiwayatKunjunganPage(), // Using the page without bottom nav
     );
+  }
+
+  Widget _buildBottomNavBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.9),
+            border: Border.all(color: Colors.white.withOpacity(0.6)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00695C).withOpacity(0.08),
+                blurRadius: 18,
+                spreadRadius: 1,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            currentIndex: 2, // Index 2 untuk tab Riwayat
+            onTap: (index) {
+              if (index != 2) { // Jika bukan tab riwayat saat ini
+                // Navigasi ke MainWrapper dengan tab yang sesuai
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MainWrapperWithIndex(initialIndex: index),
+                  ),
+                );
+              }
+            },
+            backgroundColor: Colors.transparent,
+            selectedItemColor: const Color(0xFF00897B),
+            unselectedItemColor: Colors.teal.shade200,
+            selectedFontSize: 12,
+            unselectedFontSize: 11,
+            elevation: 0,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home_outlined),
+                activeIcon: Icon(Icons.home),
+                label: 'Beranda',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.calendar_today_outlined),
+                activeIcon: Icon(Icons.calendar_today),
+                label: 'Jadwal',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.receipt_long),
+                activeIcon: Icon(Icons.receipt_long),
+                label: 'Riwayat',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person_outline),
+                activeIcon: Icon(Icons.person),
+                label: 'Profil',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// UPDATED: MainWrapperWithIndex now uses RiwayatKunjunganPage (without bottom nav)
+class MainWrapperWithIndex extends StatefulWidget {
+  final int initialIndex;
+  const MainWrapperWithIndex({super.key, required this.initialIndex});
+
+  @override
+  State<MainWrapperWithIndex> createState() => _MainWrapperWithIndexState();
+}
+
+class _MainWrapperWithIndexState extends State<MainWrapperWithIndex> {
+  late int _selectedIndex;
+  late PageController _pageController;
+  List<dynamic> jadwalDokter = [];
+
+  final _titles = const [
+    'Beranda',
+    'Jadwal Dokter', 
+    'Riwayat Kunjungan',
+    'Profil Saya',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+    fetchJadwalDokter();
+  }
+
+  Future<void> fetchJadwalDokter() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    final token = prefs.getString('token');
+    if (token == null) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse('http://192.168.1.4:8000/api/getAllDokter'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+      if (!mounted) return;
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        if (!mounted) return;
+        setState(() {
+          jadwalDokter = data['data'];
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _onItemTapped(int index) {
+    setState(() => _selectedIndex = index);
+    _pageController.jumpToPage(index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) => setState(() => _selectedIndex = index),
+        children: [
+          // Beranda
+          DashboardPage(
+            jadwalDokter: jadwalDokter,
+            onRefresh: fetchJadwalDokter,
+            onLogout: () {},
+          ),
+          // Jadwal
+          PesanJadwal(allJadwal: jadwalDokter),
+          // Riwayat - UPDATED: Use RiwayatKunjunganPage instead of RiwayatKunjungan
+          const RiwayatKunjunganPage(),
+          // Profil
+          const EditProfilePage(),
+        ],
+      ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.9),
+              border: Border.all(color: Colors.white.withOpacity(0.6)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00695C).withOpacity(0.08),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: BottomNavigationBar(
+              type: BottomNavigationBarType.fixed,
+              currentIndex: _selectedIndex,
+              onTap: _onItemTapped,
+              backgroundColor: Colors.transparent,
+              selectedItemColor: const Color(0xFF00897B),
+              unselectedItemColor: Colors.teal.shade200,
+              selectedFontSize: 12,
+              unselectedFontSize: 11,
+              elevation: 0,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home),
+                  label: 'Beranda',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.calendar_today_outlined),
+                  activeIcon: Icon(Icons.calendar_today),
+                  label: 'Jadwal',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  activeIcon: Icon(Icons.receipt_long),
+                  label: 'Riwayat',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.person_outline),
+                  activeIcon: Icon(Icons.person),
+                  label: 'Profil',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 }
 
