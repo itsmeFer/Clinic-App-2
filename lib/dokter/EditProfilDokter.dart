@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
@@ -14,7 +15,12 @@ class EditProfileDokter extends StatefulWidget {
   State<EditProfileDokter> createState() => _EditProfileDokterState();
 }
 
-class _EditProfileDokterState extends State<EditProfileDokter> {
+class _EditProfileDokterState extends State<EditProfileDokter> 
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+  
+  @override
+  bool get wantKeepAlive => true;
+
   final _formKey = GlobalKey<FormState>();
   final _namaController = TextEditingController();
   final _deskripsiController = TextEditingController();
@@ -28,11 +34,57 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
   List<dynamic> spesialisList = [];
   int? selectedSpesialisId;
 
+  // Animation controllers
+  late AnimationController _fadeAnimationController;
+  late Animation<double> _fadeAnimation;
+  late AnimationController _scaleAnimationController;
+  late Animation<double> _scaleAnimation;
+
+  // Focus nodes for better UX
+  final List<FocusNode> _focusNodes = [];
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
+    _initializeFocusNodes();
     _initializeData();
     _loadSpesialisList();
+  }
+
+  void _initializeAnimations() {
+    _fadeAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeAnimationController,
+      curve: Curves.easeInOut,
+    ));
+
+    _scaleAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(
+      parent: _scaleAnimationController,
+      curve: Curves.easeInOut,
+    ));
+
+    _fadeAnimationController.forward();
+  }
+
+  void _initializeFocusNodes() {
+    for (int i = 0; i < 5; i++) {
+      _focusNodes.add(FocusNode());
+    }
   }
 
   void _initializeData() {
@@ -41,6 +93,21 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
     _pengalamanController.text = widget.dokterData['pengalaman'] ?? '';
     _noHpController.text = widget.dokterData['no_hp'] ?? '';
     selectedSpesialisId = widget.dokterData['jenis_spesialis_id'];
+  }
+
+  @override
+  void dispose() {
+    _fadeAnimationController.dispose();
+    _scaleAnimationController.dispose();
+    _namaController.dispose();
+    _deskripsiController.dispose();
+    _pengalamanController.dispose();
+    _noHpController.dispose();
+    _scrollController.dispose();
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
   }
 
   Future<String?> getToken() async {
@@ -52,8 +119,6 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
     try {
       final token = await getToken();
       
-      print('Loading spesialis from: http://10.227.74.71:8000/api/getDataSpesialisasiDokter');
-      
       final response = await http.get(
         Uri.parse('http://10.227.74.71:8000/api/getDataSpesialisasiDokter'),
         headers: {
@@ -63,39 +128,26 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
         },
       );
 
-      print('Spesialis Response Status: ${response.statusCode}');
-      print('Spesialis Response Body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('Parsed data: $data');
         
         if (data['success'] == true) {
           setState(() {
             spesialisList = data['data'] ?? [];
           });
-          print('Spesialis list loaded: ${spesialisList.length} items');
-          for (var spesialis in spesialisList) {
-            print('Spesialis: ${spesialis['id']} - ${spesialis['nama_spesialis']}');
-          }
         } else {
-          print('API returned success: false');
-          print('Message: ${data['message']}');
+          await _loadSpesialisListAlternative();
         }
       } else {
-        print('HTTP Error: ${response.statusCode}');
         await _loadSpesialisListAlternative();
       }
     } catch (e) {
-      print('Error loading spesialis: $e');
       await _loadSpesialisListAlternative();
     }
   }
 
   Future<void> _loadSpesialisListAlternative() async {
     try {
-      print('Trying alternative endpoint without auth...');
-      
       final response = await http.get(
         Uri.parse('http://10.227.74.71:8000/api/getDataSpesialisasiDokter'),
         headers: {
@@ -104,37 +156,161 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
         },
       );
 
-      print('Alternative Response Status: ${response.statusCode}');
-      print('Alternative Response Body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
           setState(() {
             spesialisList = data['data'] ?? [];
           });
-          print('Alternative: Spesialis list loaded: ${spesialisList.length} items');
         }
       }
     } catch (e) {
-      print('Alternative loading error: $e');
-      
       setState(() {
         spesialisList = [
           {'id': 1, 'nama_spesialis': 'Umum'},
           {'id': 2, 'nama_spesialis': 'Jantung'},
           {'id': 3, 'nama_spesialis': 'Mata'},
           {'id': 4, 'nama_spesialis': 'Kulit'},
+          {'id': 5, 'nama_spesialis': 'THT'},
+          {'id': 6, 'nama_spesialis': 'Anak'},
         ];
       });
-      print('Using fallback data: ${spesialisList.length} items');
     }
   }
 
   Future<void> _pickImage() async {
+    HapticFeedback.lightImpact();
+    
+    try {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _buildImagePickerModal(),
+      );
+    } catch (e) {
+      _showErrorSnackBar('Error memilih gambar: $e');
+    }
+  }
+
+  Widget _buildImagePickerModal() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 400;
+
+    return Container(
+      margin: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: EdgeInsets.only(top: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Text(
+                    'Pilih Foto Profile',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 16 : 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildImageSourceOption(
+                        icon: Icons.camera_alt_rounded,
+                        label: 'Kamera',
+                        onTap: () => _selectImageSource(ImageSource.camera),
+                        color: Colors.teal,
+                        isSmallScreen: isSmallScreen,
+                      ),
+                      _buildImageSourceOption(
+                        icon: Icons.photo_library_rounded,
+                        label: 'Galeri',
+                        onTap: () => _selectImageSource(ImageSource.gallery),
+                        color: Colors.blue,
+                        isSmallScreen: isSmallScreen,
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 20),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Batal',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: isSmallScreen ? 14 : 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageSourceOption({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required Color color,
+    required bool isSmallScreen,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: isSmallScreen ? 32 : 40,
+              color: color,
+            ),
+            SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: isSmallScreen ? 12 : 14,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectImageSource(ImageSource source) async {
+    Navigator.pop(context);
+    
     try {
       final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 1024,
         maxHeight: 1024,
         imageQuality: 85,
@@ -144,14 +320,10 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
         setState(() {
           _imageFile = File(image.path);
         });
+        _showSuccessSnackBar('Foto berhasil dipilih');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error picking image: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnackBar('Error memilih gambar: $e');
     }
   }
 
@@ -160,18 +332,17 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
       return;
     }
 
+    HapticFeedback.mediumImpact();
+    _scaleAnimationController.forward().then((_) {
+      _scaleAnimationController.reverse();
+    });
+
     setState(() {
       isLoading = true;
     });
 
     try {
       final token = await getToken();
-      
-      print('Nama Dokter: ${_namaController.text}');
-      print('Deskripsi: ${_deskripsiController.text}');
-      print('Pengalaman: ${_pengalamanController.text}');
-      print('No HP: ${_noHpController.text}');
-      print('Spesialis ID: $selectedSpesialisId');
       
       var request = http.MultipartRequest(
         'POST',
@@ -199,30 +370,19 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
         request.fields['jenis_spesialis_id'] = selectedSpesialisId.toString();
       }
 
-      print('Request fields: ${request.fields}');
-
       if (_imageFile != null) {
         request.files.add(await http.MultipartFile.fromPath(
           'foto_dokter',
           _imageFile!.path,
         ));
-        print('Image added: ${_imageFile!.path}');
       }
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
       final data = jsonDecode(response.body);
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
       if (response.statusCode == 200 && data['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(data['message'] ?? 'Profile berhasil diupdate'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSuccessSnackBar(data['message'] ?? 'Profile berhasil diupdate');
         Navigator.pop(context, true);
       } else {
         String errorMessage = 'Gagal update profile';
@@ -233,22 +393,10 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
           errorMessage = data['message'];
         }
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        _showErrorSnackBar(errorMessage);
       }
     } catch (e) {
-      print('Error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnackBar('Error: $e');
     } finally {
       setState(() {
         isLoading = false;
@@ -256,81 +404,124 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
     }
   }
 
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Responsive breakpoints
-        bool isTablet = constraints.maxWidth >= 768;
-        bool isDesktop = constraints.maxWidth >= 1024;
-        
-        // Calculate responsive dimensions
-        double maxWidth = isDesktop ? 800 : isTablet ? 600 : double.infinity;
-        double horizontalPadding = isDesktop ? 32 : isTablet ? 24 : 16;
-        double cardSpacing = isTablet ? 24 : 16;
-        
-        return Scaffold(
-          backgroundColor: isTablet ? Colors.grey.shade100 : Colors.grey.shade50,
-          appBar: _buildAppBar(context, isTablet),
-          body: Center(
+    super.build(context);
+    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 400;
+    final isTablet = screenWidth >= 768;
+
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      appBar: _buildAppBar(isSmallScreen),
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          physics: BouncingScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
+          child: Center(
             child: Container(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: horizontalPadding,
-                  vertical: cardSpacing,
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildProfilePhotoSection(context, isTablet, cardSpacing),
-                      SizedBox(height: cardSpacing),
-                      _buildFormSection(context, isTablet, cardSpacing),
-                      SizedBox(height: cardSpacing * 1.5),
-                      _buildSaveButton(context, isTablet),
-                    ],
-                  ),
+              constraints: BoxConstraints(
+                maxWidth: isTablet ? 600 : double.infinity,
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildProfilePhotoSection(isSmallScreen),
+                    SizedBox(height: isSmallScreen ? 20 : 24),
+                    _buildFormSection(isSmallScreen),
+                    SizedBox(height: isSmallScreen ? 24 : 32),
+                    _buildSaveButton(isSmallScreen),
+                    SizedBox(height: 20),
+                  ],
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, bool isTablet) {
+  PreferredSizeWidget _buildAppBar(bool isSmallScreen) {
     return AppBar(
       title: Text(
         'Edit Profile Dokter',
         style: TextStyle(
-          fontSize: isTablet ? 20 : 18,
+          fontSize: isSmallScreen ? 18 : 20,
           fontWeight: FontWeight.w600,
         ),
       ),
-      backgroundColor: Colors.teal,
+      backgroundColor: Colors.teal.shade600,
       foregroundColor: Colors.white,
-      elevation: isTablet ? 4 : 0,
-      centerTitle: isTablet,
-      
+      elevation: 0,
+      systemOverlayStyle: SystemUiOverlayStyle.light,
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.teal.shade600, Colors.teal.shade500],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildProfilePhotoSection(BuildContext context, bool isTablet, double spacing) {
-    double avatarRadius = isTablet ? 60 : 50;
-    double cameraIconSize = isTablet ? 20 : 16;
+  Widget _buildProfilePhotoSection(bool isSmallScreen) {
+    double avatarRadius = isSmallScreen ? 60 : 70;
     
     return Card(
-      elevation: isTablet ? 6 : 3,
+      elevation: 6,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Container(
-        padding: EdgeInsets.all(isTablet ? 32 : 20),
+        padding: EdgeInsets.all(isSmallScreen ? 24 : 32),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
+          borderRadius: BorderRadius.circular(16),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -342,257 +533,341 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
         ),
         child: Column(
           children: [
-            Stack(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.3),
-                        spreadRadius: 2,
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+            Hero(
+              tag: 'profile_photo',
+              child: Stack(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.teal.withOpacity(0.3),
+                          spreadRadius: 4,
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: CircleAvatar(
+                      radius: avatarRadius,
+                      backgroundColor: Colors.grey.shade200,
+                      backgroundImage: _imageFile != null
+                          ? FileImage(_imageFile!)
+                          : (widget.dokterData['foto_dokter'] != null
+                              ? NetworkImage(
+                                  'http://10.227.74.71:8000/storage/${widget.dokterData['foto_dokter']}',
+                                )
+                              : null),
+                      child: (_imageFile == null && widget.dokterData['foto_dokter'] == null)
+                          ? Icon(
+                              Icons.person_rounded,
+                              size: avatarRadius * 0.7,
+                              color: Colors.grey.shade400,
+                            )
+                          : null,
+                    ),
                   ),
-                  child: CircleAvatar(
-                    radius: avatarRadius,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage: _imageFile != null
-                        ? FileImage(_imageFile!)
-                        : (widget.dokterData['foto_dokter'] != null
-                            ? NetworkImage(
-                                'http://10.227.74.71:8000/storage/${widget.dokterData['foto_dokter']}',
-                              )
-                            : null),
-                    child: (_imageFile == null && widget.dokterData['foto_dokter'] == null)
-                        ? Icon(
-                            Icons.person,
-                            size: avatarRadius,
-                            color: Colors.grey.shade400,
-                          )
-                        : null,
-                  ),
-                ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: GestureDetector(
-                    onTap: _pickImage,
-                    child: Container(
-                      padding: EdgeInsets.all(isTablet ? 12 : 8),
-                      decoration: BoxDecoration(
-                        color: Colors.teal,
-                        borderRadius: BorderRadius.circular(isTablet ? 24 : 20),
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.3),
-                            spreadRadius: 1,
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(25),
+                        onTap: _pickImage,
+                        child: Container(
+                          padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.shade600,
+                            borderRadius: BorderRadius.circular(25),
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.teal.withOpacity(0.4),
+                                spreadRadius: 2,
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.camera_alt,
-                        color: Colors.white,
-                        size: cameraIconSize,
+                          child: Icon(
+                            Icons.camera_alt_rounded,
+                            color: Colors.white,
+                            size: isSmallScreen ? 18 : 20,
+                          ),
+                        ),
                       ),
                     ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: isSmallScreen ? 16 : 20),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.teal.shade100,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.teal.shade700,
+                    size: isSmallScreen ? 16 : 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Ketuk untuk mengubah foto',
+                    style: TextStyle(
+                      color: Colors.teal.shade700,
+                      fontSize: isSmallScreen ? 12 : 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormSection(bool isSmallScreen) {
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(isSmallScreen ? 20 : 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.edit_rounded,
+                    color: Colors.teal.shade700,
+                    size: isSmallScreen ? 20 : 24,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'Informasi Dokter',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 18 : 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
                   ),
                 ),
               ],
             ),
-            SizedBox(height: isTablet ? 20 : 16),
-            Text(
-              'Ketuk ikon kamera untuk mengubah foto',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: isTablet ? 16 : 14,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            SizedBox(height: isSmallScreen ? 20 : 24),
+            _buildFormFields(isSmallScreen),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFormSection(BuildContext context, bool isTablet, double spacing) {
-    return Card(
-      elevation: isTablet ? 6 : 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(isTablet ? 24 : 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Informasi Dokter',
-              style: TextStyle(
-                fontSize: isTablet ? 20 : 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.teal.shade700,
-              ),
-            ),
-            SizedBox(height: isTablet ? 24 : 16),
-            _buildResponsiveFormFields(isTablet),
-          ],
+  Widget _buildFormFields(bool isSmallScreen) {
+    return Column(
+      children: [
+        _buildTextField(
+          controller: _namaController,
+          label: 'Nama Dokter',
+          icon: Icons.person_outline_rounded,
+          focusNode: _focusNodes[0],
+          nextFocusNode: _focusNodes[1],
+          isSmallScreen: isSmallScreen,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Nama dokter tidak boleh kosong';
+            }
+            return null;
+          },
         ),
-      ),
+        SizedBox(height: isSmallScreen ? 16 : 20),
+        
+        _buildDropdownField(isSmallScreen),
+        SizedBox(height: isSmallScreen ? 16 : 20),
+        
+        _buildTextField(
+          controller: _noHpController,
+          label: 'No. HP',
+          icon: Icons.phone_outlined,
+          keyboardType: TextInputType.phone,
+          focusNode: _focusNodes[2],
+          nextFocusNode: _focusNodes[3],
+          isSmallScreen: isSmallScreen,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'No HP tidak boleh kosong';
+            }
+            if (value.length < 10) {
+              return 'No HP minimal 10 digit';
+            }
+            return null;
+          },
+        ),
+        SizedBox(height: isSmallScreen ? 16 : 20),
+        
+        _buildTextField(
+          controller: _pengalamanController,
+          label: 'Pengalaman',
+          icon: Icons.work_outline_rounded,
+          focusNode: _focusNodes[3],
+          nextFocusNode: _focusNodes[4],
+          isSmallScreen: isSmallScreen,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Pengalaman tidak boleh kosong';
+            }
+            return null;
+          },
+        ),
+        SizedBox(height: isSmallScreen ? 16 : 20),
+        
+        _buildTextField(
+          controller: _deskripsiController,
+          label: 'Deskripsi',
+          icon: Icons.description_outlined,
+          maxLines: isSmallScreen ? 4 : 5,
+          focusNode: _focusNodes[4],
+          isSmallScreen: isSmallScreen,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Deskripsi tidak boleh kosong';
+            }
+            return null;
+          },
+        ),
+      ],
     );
   }
 
-  Widget _buildResponsiveFormFields(bool isTablet) {
-    // For tablet/desktop, use 2 columns for some fields
-    if (isTablet) {
-      return Column(
-        children: [
-          // Row 1: Nama and Spesialisasi
-          Row(
-            children: [
-              Expanded(child: _buildTextField('nama', isTablet)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildDropdownField(isTablet)),
-            ],
-          ),
-          SizedBox(height: isTablet ? 20 : 16),
-          
-          // Row 2: No HP and Pengalaman  
-          Row(
-            children: [
-              Expanded(child: _buildTextField('noHp', isTablet)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildTextField('pengalaman', isTablet)),
-            ],
-          ),
-          SizedBox(height: isTablet ? 20 : 16),
-          
-          // Row 3: Deskripsi (full width)
-          _buildTextField('deskripsi', isTablet),
-        ],
-      );
-    } else {
-      // Mobile: single column
-      return Column(
-        children: [
-          _buildTextField('nama', isTablet),
-          const SizedBox(height: 16),
-          _buildDropdownField(isTablet),
-          const SizedBox(height: 16),
-          _buildTextField('noHp', isTablet),
-          const SizedBox(height: 16),
-          _buildTextField('pengalaman', isTablet),
-          const SizedBox(height: 16),
-          _buildTextField('deskripsi', isTablet),
-        ],
-      );
-    }
-  }
-
-  Widget _buildTextField(String type, bool isTablet) {
-    TextEditingController controller;
-    String label;
-    IconData icon;
-    TextInputType? keyboardType;
-    int? maxLines;
-    String validationMessage;
-
-    switch (type) {
-      case 'nama':
-        controller = _namaController;
-        label = 'Nama Dokter';
-        icon = Icons.person_outline;
-        validationMessage = 'Nama dokter tidak boleh kosong';
-        break;
-      case 'noHp':
-        controller = _noHpController;
-        label = 'No. HP';
-        icon = Icons.phone_outlined;
-        keyboardType = TextInputType.phone;
-        validationMessage = 'No HP tidak boleh kosong';
-        break;
-      case 'pengalaman':
-        controller = _pengalamanController;
-        label = 'Pengalaman';
-        icon = Icons.work_outline;
-        validationMessage = 'Pengalaman tidak boleh kosong';
-        break;
-      case 'deskripsi':
-        controller = _deskripsiController;
-        label = 'Deskripsi';
-        icon = Icons.description_outlined;
-        maxLines = isTablet ? 5 : 4;
-        validationMessage = 'Deskripsi tidak boleh kosong';
-        break;
-      default:
-        throw ArgumentError('Invalid field type: $type');
-    }
-
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    int? maxLines,
+    FocusNode? focusNode,
+    FocusNode? nextFocusNode,
+    required bool isSmallScreen,
+    List<TextInputFormatter>? inputFormatters,
+    String? Function(String?)? validator,
+  }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       keyboardType: keyboardType,
       maxLines: maxLines ?? 1,
-      style: TextStyle(fontSize: isTablet ? 16 : 14),
+      inputFormatters: inputFormatters,
+      style: TextStyle(fontSize: isSmallScreen ? 14 : 16),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(fontSize: isTablet ? 16 : 14),
+        labelStyle: TextStyle(
+          fontSize: isSmallScreen ? 14 : 16,
+          color: Colors.grey.shade600,
+        ),
         prefixIcon: Padding(
-          padding: EdgeInsets.only(bottom: maxLines != null && maxLines > 1 ? 60 : 0),
-          child: Icon(icon, size: isTablet ? 24 : 20),
+          padding: EdgeInsets.only(
+            bottom: maxLines != null && maxLines > 1 ? 60 : 0,
+          ),
+          child: Icon(
+            icon,
+            size: isSmallScreen ? 20 : 24,
+            color: Colors.teal.shade600,
+          ),
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
-          borderSide: const BorderSide(color: Colors.teal, width: 2),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.teal.shade600, width: 2),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
+        ),
+        filled: true,
+        fillColor: Colors.grey.shade50,
         contentPadding: EdgeInsets.symmetric(
-          horizontal: isTablet ? 16 : 12,
-          vertical: isTablet ? 16 : 12,
+          horizontal: isSmallScreen ? 14 : 16,
+          vertical: isSmallScreen ? 14 : 16,
         ),
       ),
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return validationMessage;
+      textInputAction: nextFocusNode != null ? TextInputAction.next : TextInputAction.done,
+      onFieldSubmitted: (_) {
+        if (nextFocusNode != null) {
+          FocusScope.of(context).requestFocus(nextFocusNode);
         }
-        return null;
       },
+      validator: validator,
     );
   }
 
-  Widget _buildDropdownField(bool isTablet) {
+  Widget _buildDropdownField(bool isSmallScreen) {
     return DropdownButtonFormField<int>(
       value: selectedSpesialisId,
-      style: TextStyle(fontSize: isTablet ? 16 : 14, color: Colors.black),
+      style: TextStyle(
+        fontSize: isSmallScreen ? 14 : 16,
+        color: Colors.black,
+      ),
       decoration: InputDecoration(
         labelText: 'Spesialisasi',
-        labelStyle: TextStyle(fontSize: isTablet ? 16 : 14),
-        prefixIcon: Icon(Icons.medical_services_outlined, size: isTablet ? 24 : 20),
+        labelStyle: TextStyle(
+          fontSize: isSmallScreen ? 14 : 16,
+          color: Colors.grey.shade600,
+        ),
+        prefixIcon: Icon(
+          Icons.medical_services_outlined,
+          size: isSmallScreen ? 20 : 24,
+          color: Colors.teal.shade600,
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
-          borderSide: const BorderSide(color: Colors.teal, width: 2),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.teal.shade600, width: 2),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
+        ),
+        filled: true,
+        fillColor: Colors.grey.shade50,
         contentPadding: EdgeInsets.symmetric(
-          horizontal: isTablet ? 16 : 12,
-          vertical: isTablet ? 16 : 12,
+          horizontal: isSmallScreen ? 14 : 16,
+          vertical: isSmallScreen ? 14 : 16,
         ),
       ),
       items: spesialisList.map<DropdownMenuItem<int>>((spesialis) {
@@ -600,7 +875,7 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
           value: spesialis['id'],
           child: Text(
             spesialis['nama_spesialis'] ?? '',
-            style: TextStyle(fontSize: isTablet ? 16 : 14),
+            style: TextStyle(fontSize: isSmallScreen ? 14 : 16),
           ),
         );
       }).toList(),
@@ -615,59 +890,61 @@ class _EditProfileDokterState extends State<EditProfileDokter> {
         }
         return null;
       },
+      dropdownColor: Colors.white,
+      icon: Icon(
+        Icons.arrow_drop_down_rounded,
+        color: Colors.teal.shade600,
+      ),
     );
   }
 
-  Widget _buildSaveButton(BuildContext context, bool isTablet) {
-    return Container(
-      width: double.infinity,
-      constraints: BoxConstraints(
-        maxWidth: isTablet ? 400 : double.infinity,
-      ),
-      child: ElevatedButton.icon(
-        onPressed: isLoading ? null : _updateProfile,
-        icon: isLoading
-            ? SizedBox(
-                width: isTablet ? 20 : 18,
-                height: isTablet ? 20 : 18,
-                child: const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+  Widget _buildSaveButton(bool isSmallScreen) {
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: Container(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isLoading ? null : _updateProfile,
+              icon: isLoading
+                  ? SizedBox(
+                      width: isSmallScreen ? 18 : 20,
+                      height: isSmallScreen ? 18 : 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Icon(
+                      Icons.save_rounded,
+                      size: isSmallScreen ? 20 : 22,
+                    ),
+              label: Text(
+                isLoading ? 'Menyimpan...' : 'Simpan Perubahan',
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 16 : 18,
+                  fontWeight: FontWeight.w600,
                 ),
-              )
-            : Icon(
-                Icons.save_outlined,
-                size: isTablet ? 22 : 20,
               ),
-        label: Text(
-          isLoading ? 'Menyimpan...' : 'Simpan Perubahan',
-          style: TextStyle(
-            fontSize: isTablet ? 18 : 16,
-            fontWeight: FontWeight.w600,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade600,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(
+                  vertical: isSmallScreen ? 16 : 18,
+                  horizontal: 24,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 4,
+                shadowColor: Colors.teal.withOpacity(0.3),
+              ),
+            ),
           ),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.teal,
-          foregroundColor: Colors.white,
-          padding: EdgeInsets.symmetric(
-            vertical: isTablet ? 20 : 16,
-            horizontal: isTablet ? 32 : 24,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
-          ),
-          elevation: isTablet ? 4 : 2,
-        ),
-      ),
+        );
+      },
     );
-  }
-
-  @override
-  void dispose() {
-    _namaController.dispose();
-    _deskripsiController.dispose();
-    _pengalamanController.dispose();
-    _noHpController.dispose();
-    super.dispose();
   }
 }

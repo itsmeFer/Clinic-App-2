@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,7 +10,12 @@ class RiwayatPasienPage extends StatefulWidget {
   _RiwayatPasienPageState createState() => _RiwayatPasienPageState();
 }
 
-class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProviderStateMixin {
+class _RiwayatPasienPageState extends State<RiwayatPasienPage> 
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  
+  @override
+  bool get wantKeepAlive => true;
+
   List<dynamic> riwayatPasien = [];
   List<dynamic> filteredRiwayatPasien = [];
   bool isLoading = true;
@@ -22,15 +28,21 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
   late Animation<double> _searchAnimation;
   late AnimationController _typingAnimationController;
   late Animation<double> _typingAnimation;
+  late AnimationController _fadeAnimationController;
+  late Animation<double> _fadeAnimation;
+  
   bool _isSearchFocused = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     _loadRiwayatPasien();
     searchController.addListener(_filterPasien);
-    
-    // Initialize animation controllers
+  }
+
+  void _initializeAnimations() {
     _searchAnimationController = AnimationController(
       duration: Duration(milliseconds: 300),
       vsync: this,
@@ -49,9 +61,21 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
     );
     _typingAnimation = Tween<double>(
       begin: 1.0,
-      end: 1.05,
+      end: 1.02,
     ).animate(CurvedAnimation(
       parent: _typingAnimationController,
+      curve: Curves.easeInOut,
+    ));
+
+    _fadeAnimationController = AnimationController(
+      duration: Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeAnimationController,
       curve: Curves.easeInOut,
     ));
   }
@@ -60,15 +84,16 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
   void dispose() {
     searchController.removeListener(_filterPasien);
     searchController.dispose();
+    _scrollController.dispose();
     _searchAnimationController.dispose();
     _typingAnimationController.dispose();
+    _fadeAnimationController.dispose();
     super.dispose();
   }
 
   void _filterPasien() {
-    String query = searchController.text.toLowerCase();
+    String query = searchController.text.toLowerCase().trim();
     
-    // Trigger typing animation
     if (query.isNotEmpty) {
       _typingAnimationController.forward().then((_) {
         _typingAnimationController.reverse();
@@ -81,7 +106,11 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
       } else {
         filteredRiwayatPasien = riwayatPasien.where((pasien) {
           String namaPasien = (pasien['pasien']['nama_pasien'] ?? '').toString().toLowerCase();
-          return namaPasien.contains(query);
+          String noAntrian = (pasien['no_antrian'] ?? '').toString().toLowerCase();
+          String status = (pasien['status'] ?? '').toString().toLowerCase();
+          return namaPasien.contains(query) || 
+                 noAntrian.contains(query) || 
+                 status.contains(query);
         }).toList();
       }
     });
@@ -117,6 +146,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
             filteredRiwayatPasien = riwayatPasien;
             isLoading = false;
           });
+          _fadeAnimationController.forward();
         } else {
           throw Exception(data['message']);
         }
@@ -132,6 +162,8 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
   }
 
   Future<void> _showDetailRiwayat(dynamic kunjunganId) async {
+    HapticFeedback.lightImpact();
+    
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token');
@@ -160,24 +192,31 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
   }
 
   void _showDetailDialog(dynamic detailData) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 400;
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.9,
-            height: MediaQuery.of(context).size.height * 0.8,
+            width: screenWidth * (isSmallScreen ? 0.95 : 0.9),
+            height: MediaQuery.of(context).size.height * 0.85,
             child: Column(
               children: [
-                // Header
+                // Header dengan gradient
                 Container(
-                  padding: EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  padding: EdgeInsets.symmetric(
+                    vertical: isSmallScreen ? 14 : 18,
+                    horizontal: isSmallScreen ? 16 : 20,
+                  ),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.teal.shade600, Colors.teal.shade400],
+                      colors: [Colors.teal.shade600, Colors.teal.shade500],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     ),
@@ -188,102 +227,172 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                   ),
                   child: Row(
                     children: [
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.medical_information,
+                          color: Colors.white,
+                          size: isSmallScreen ? 20 : 24,
+                        ),
+                      ),
+                      SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Detail Riwayat Pasien',
+                          'Detail Riwayat Medis',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
-                            fontSize: 18,
+                            fontSize: isSmallScreen ? 16 : 18,
                           ),
                         ),
                       ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: Icon(Icons.close, color: Colors.white),
-                        padding: EdgeInsets.zero,
-                        constraints: BoxConstraints(),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.close_rounded,
+                              color: Colors.white,
+                              size: isSmallScreen ? 20 : 24,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
                 
-                // Content
+                // Content dengan scroll yang lebih smooth
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildDetailSection('Informasi Pasien', [
-                          'Nama: ${detailData['pasien']['nama_pasien'] ?? 'N/A'}',
-                          'Alamat: ${detailData['pasien']['alamat'] ?? 'N/A'}',
-                          'Tanggal Lahir: ${_formatDate(detailData['pasien']['tanggal_lahir'])}',
-                          'Jenis Kelamin: ${detailData['pasien']['jenis_kelamin'] ?? 'N/A'}',
-                        ], Colors.teal.shade50, Colors.teal.shade600),
-                        SizedBox(height: 16),
-                        _buildDetailSection('Informasi Kunjungan', [
-                          'Tanggal Kunjungan: ${_formatDate(detailData['tanggal_kunjungan'])}',
-                          'No. Antrian: ${detailData['no_antrian'] ?? 'N/A'}',
-                          'Keluhan Awal: ${detailData['keluhan_awal'] ?? 'N/A'}',
-                          'Status: ${detailData['status'] ?? 'N/A'}',
-                        ], Colors.blue.shade50, Colors.blue.shade600),
-                        if (detailData['emr'] != null) ...[
-                          SizedBox(height: 16),
-                          _buildDetailSection('Electronic Medical Record', [
-                            'Keluhan Utama: ${detailData['emr']['keluhan_utama'] ?? 'N/A'}',
-                            'Riwayat Penyakit Sekarang: ${detailData['emr']['riwayat_penyakit_sekarang'] ?? 'N/A'}',
-                            'Riwayat Penyakit Dahulu: ${detailData['emr']['riwayat_penyakit_dahulu'] ?? 'N/A'}',
-                            'Riwayat Keluarga: ${detailData['emr']['riwayat_penyakit_keluarga'] ?? 'N/A'}',
-                            'Diagnosis: ${detailData['emr']['diagnosis'] ?? 'N/A'}',
-                          ], Colors.purple.shade50, Colors.purple.shade600),
-                          SizedBox(height: 16),
-                          _buildDetailSection('Tanda Vital', [
-                            'Tekanan Darah: ${detailData['emr']['tekanan_darah'] ?? 'N/A'}',
-                            'Suhu Tubuh: ${detailData['emr']['suhu_tubuh'] ?? 'N/A'}°C',
-                            'Nadi: ${detailData['emr']['nadi'] ?? 'N/A'} bpm',
-                            'Pernapasan: ${detailData['emr']['pernapasan'] ?? 'N/A'} per menit',
-                            'Saturasi Oksigen: ${detailData['emr']['saturasi_oksigen'] ?? 'N/A'}%',
-                          ], Colors.orange.shade50, Colors.orange.shade600),
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
+                      physics: BouncingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildDetailSection(
+                            'Informasi Pasien',
+                            [
+                              'Nama: ${detailData['pasien']['nama_pasien'] ?? 'N/A'}',
+                              'Alamat: ${detailData['pasien']['alamat'] ?? 'N/A'}',
+                              'Tanggal Lahir: ${_formatDate(detailData['pasien']['tanggal_lahir'])}',
+                              'Jenis Kelamin: ${detailData['pasien']['jenis_kelamin'] ?? 'N/A'}',
+                            ],
+                            Colors.teal.shade50,
+                            Colors.teal.shade600,
+                            Icons.person_rounded,
+                            isSmallScreen,
+                          ),
+                          SizedBox(height: isSmallScreen ? 12 : 16),
+                          
+                          _buildDetailSection(
+                            'Informasi Kunjungan',
+                            [
+                              'Tanggal Kunjungan: ${_formatDate(detailData['tanggal_kunjungan'])}',
+                              'No. Antrian: ${detailData['no_antrian'] ?? 'N/A'}',
+                              'Keluhan Awal: ${detailData['keluhan_awal'] ?? 'N/A'}',
+                              'Status: ${detailData['status'] ?? 'N/A'}',
+                            ],
+                            Colors.blue.shade50,
+                            Colors.blue.shade600,
+                            Icons.event_note_rounded,
+                            isSmallScreen,
+                          ),
+                          
+                          if (detailData['emr'] != null) ...[
+                            SizedBox(height: isSmallScreen ? 12 : 16),
+                            _buildDetailSection(
+                              'Electronic Medical Record',
+                              [
+                                'Keluhan Utama: ${detailData['emr']['keluhan_utama'] ?? 'N/A'}',
+                                'Riwayat Penyakit Dahulu: ${detailData['emr']['riwayat_penyakit_dahulu'] ?? 'N/A'}',
+                                'Riwayat Keluarga: ${detailData['emr']['riwayat_penyakit_keluarga'] ?? 'N/A'}',
+                                'Diagnosis: ${detailData['emr']['diagnosis'] ?? 'N/A'}',
+                              ],
+                              Colors.purple.shade50,
+                              Colors.purple.shade600,
+                              Icons.medical_information_rounded,
+                              isSmallScreen,
+                            ),
+                            
+                            SizedBox(height: isSmallScreen ? 12 : 16),
+                            _buildDetailSection(
+                              'Tanda Vital',
+                              [
+                                'Tekanan Darah: ${detailData['emr']['tekanan_darah'] ?? 'N/A'}',
+                                'Suhu Tubuh: ${detailData['emr']['suhu_tubuh'] ?? 'N/A'}°C',
+                                'Nadi: ${detailData['emr']['nadi'] ?? 'N/A'} bpm',
+                                'Pernapasan: ${detailData['emr']['pernapasan'] ?? 'N/A'} per menit',
+                                'Saturasi Oksigen: ${detailData['emr']['saturasi_oksigen'] ?? 'N/A'}%',
+                              ],
+                              Colors.orange.shade50,
+                              Colors.orange.shade600,
+                              Icons.monitor_heart_rounded,
+                              isSmallScreen,
+                            ),
+                          ],
+                          
+                          if (_hasValidResep(detailData)) ...[
+                            SizedBox(height: isSmallScreen ? 12 : 16),
+                            _buildResepSection(_getResepData(detailData), isSmallScreen),
+                          ],
+                          
+                          SizedBox(height: 20),
                         ],
-                        if (_hasValidResep(detailData)) ...[
-                          SizedBox(height: 16),
-                          _buildResepSection(_getResepData(detailData)),
-                        ],
-                        SizedBox(height: 20),
-                      ],
+                      ),
                     ),
                   ),
                 ),
                 
-                // Actions
+                // Footer actions dengan styling yang lebih baik
                 Container(
-                  padding: EdgeInsets.all(20),
+                  padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade50,
                     borderRadius: BorderRadius.only(
                       bottomLeft: Radius.circular(20),
                       bottomRight: Radius.circular(20),
                     ),
+                    border: Border(
+                      top: BorderSide(
+                        color: Colors.grey.shade200,
+                        width: 1,
+                      ),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: () => Navigator.of(context).pop(),
+                        icon: Icon(Icons.close_rounded, size: isSmallScreen ? 16 : 18),
+                        label: Text(
+                          'Tutup',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: isSmallScreen ? 13 : 14,
+                          ),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.teal.shade600,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        ),
-                        child: Text(
-                          'Tutup',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isSmallScreen ? 16 : 20,
+                            vertical: isSmallScreen ? 10 : 12,
                           ),
+                          elevation: 2,
                         ),
                       ),
                     ],
@@ -297,9 +406,16 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
     );
   }
 
-  Widget _buildDetailSection(String title, List<String> items, Color backgroundColor, Color titleColor) {
+  Widget _buildDetailSection(
+    String title,
+    List<String> items,
+    Color backgroundColor,
+    Color titleColor,
+    IconData icon,
+    bool isSmallScreen,
+  ) {
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(isSmallScreen ? 14 : 16),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
@@ -318,15 +434,15 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
           Row(
             children: [
               Container(
-                padding: EdgeInsets.all(8),
+                padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
                 decoration: BoxDecoration(
                   color: titleColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  _getIconForSection(title),
+                  icon,
                   color: titleColor,
-                  size: 20,
+                  size: isSmallScreen ? 18 : 20,
                 ),
               ),
               SizedBox(width: 12),
@@ -335,7 +451,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                   title,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    fontSize: isSmallScreen ? 14 : 16,
                     color: titleColor,
                   ),
                 ),
@@ -362,7 +478,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                   child: Text(
                     item,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: isSmallScreen ? 12 : 14,
                       height: 1.4,
                       color: Colors.grey.shade700,
                     ),
@@ -376,24 +492,9 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
     );
   }
 
-  IconData _getIconForSection(String title) {
-    switch (title) {
-      case 'Informasi Pasien':
-        return Icons.person;
-      case 'Informasi Kunjungan':
-        return Icons.event_note;
-      case 'Electronic Medical Record':
-        return Icons.medical_information;
-      case 'Tanda Vital':
-        return Icons.monitor_heart;
-      default:
-        return Icons.info;
-    }
-  }
-
-  Widget _buildResepSection(List<dynamic> obatList) {
+  Widget _buildResepSection(List<dynamic> obatList, bool isSmallScreen) {
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(isSmallScreen ? 14 : 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [Colors.green.shade50, Colors.green.shade100],
@@ -416,15 +517,15 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
           Row(
             children: [
               Container(
-                padding: EdgeInsets.all(8),
+                padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
                 decoration: BoxDecoration(
                   color: Colors.green.shade200,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  Icons.medical_services,
+                  Icons.medical_services_rounded,
                   color: Colors.green.shade700,
-                  size: 20,
+                  size: isSmallScreen ? 18 : 20,
                 ),
               ),
               SizedBox(width: 12),
@@ -432,7 +533,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                 'Resep Obat',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 16,
+                  fontSize: isSmallScreen ? 14 : 16,
                   color: Colors.green.shade700,
                 ),
               ),
@@ -468,7 +569,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
 
             return Container(
               margin: EdgeInsets.only(bottom: 12),
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
@@ -486,27 +587,32 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                 children: [
                   Row(
                     children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          namaObat,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green.shade800,
-                            fontSize: 14,
+                      Expanded(
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isSmallScreen ? 8 : 10,
+                            vertical: isSmallScreen ? 4 : 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            namaObat,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade800,
+                              fontSize: isSmallScreen ? 12 : 14,
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
                   SizedBox(height: 8),
-                  _buildObatInfo('Jumlah', jumlah, Icons.inventory),
-                  _buildObatInfo('Dosis', dosis, Icons.medication),
-                  _buildObatInfo('Keterangan', keterangan, Icons.notes),
+                  _buildObatInfo('Jumlah', '$jumlah tablet', Icons.inventory_rounded, isSmallScreen),
+                  _buildObatInfo('Dosis', '$dosis mg', Icons.medication_rounded, isSmallScreen),
+                  _buildObatInfo('Keterangan', keterangan, Icons.notes_rounded, isSmallScreen),
                 ],
               ),
             );
@@ -516,17 +622,21 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
     );
   }
 
-  Widget _buildObatInfo(String label, String value, IconData icon) {
+  Widget _buildObatInfo(String label, String value, IconData icon, bool isSmallScreen) {
     return Padding(
       padding: EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Colors.green.shade600),
+          Icon(
+            icon,
+            size: isSmallScreen ? 12 : 14,
+            color: Colors.green.shade600,
+          ),
           SizedBox(width: 6),
           Text(
             '$label: ',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: isSmallScreen ? 11 : 13,
               fontWeight: FontWeight.w500,
               color: Colors.grey.shade700,
             ),
@@ -535,7 +645,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: isSmallScreen ? 11 : 13,
                 color: Colors.grey.shade800,
               ),
             ),
@@ -607,12 +717,19 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
         backgroundColor: Colors.red.shade400,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
         ),
+        margin: EdgeInsets.all(16),
       ),
     );
   }
@@ -627,21 +744,20 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
     }
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isSmallScreen) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmallScreen ? 12 : 16,
+        vertical: isSmallScreen ? 10 : 12,
+      ),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withOpacity(0.2)),
         boxShadow: [
           BoxShadow(
             color: color.withOpacity(0.1),
-            blurRadius: 6,
+            blurRadius: 8,
             offset: Offset(0, 2),
           ),
         ],
@@ -650,12 +766,12 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: EdgeInsets.all(8),
+            padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 20, color: color),
+            child: Icon(icon, size: isSmallScreen ? 18 : 20, color: color),
           ),
           SizedBox(width: 12),
           Column(
@@ -664,7 +780,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
               Text(
                 value,
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: isSmallScreen ? 16 : 18,
                   fontWeight: FontWeight.bold,
                   color: color,
                 ),
@@ -672,7 +788,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: isSmallScreen ? 10 : 11,
                   color: color.withOpacity(0.8),
                   fontWeight: FontWeight.w500,
                 ),
@@ -686,6 +802,11 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 400;
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
@@ -693,16 +814,17 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
           'Riwayat Pasien',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            fontSize: isSmallScreen ? 18 : 20,
           ),
         ),
         backgroundColor: Colors.teal.shade600,
         foregroundColor: Colors.white,
         elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Colors.teal.shade600, Colors.teal.shade400],
+              colors: [Colors.teal.shade600, Colors.teal.shade500],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
@@ -722,7 +844,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.teal.shade600, Colors.teal.shade400],
+                colors: [Colors.teal.shade600, Colors.teal.shade500],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),
@@ -735,15 +857,17 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                     'Total Pasien Diperiksa',
                     '${riwayatPasien.length}',
                     Icons.people_rounded,
-                    Colors.white,
+                    Colors.teal.shade600,
+                    isSmallScreen,
                   ),
                 ),
-                // Search Bar
+                
+                // Search Bar dengan animasi yang lebih halus
                 AnimatedBuilder(
                   animation: _searchAnimation,
                   builder: (context, child) {
                     return Container(
-                      margin: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      margin: EdgeInsets.fromLTRB(16, 12, 16, 16),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(25),
@@ -774,16 +898,16 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                               child: TextField(
                                 controller: searchController,
                                 decoration: InputDecoration(
-                                  hintText: 'Cari berdasarkan nama pasien...',
+                                  hintText: 'Cari nama pasien, no. antrian, atau status...',
                                   hintStyle: TextStyle(
                                     color: Colors.grey.shade500,
-                                    fontSize: 14,
+                                    fontSize: isSmallScreen ? 12 : 14,
                                   ),
                                   prefixIcon: AnimatedContainer(
                                     duration: Duration(milliseconds: 300),
                                     curve: Curves.easeInOut,
                                     child: Icon(
-                                      Icons.search,
+                                      Icons.search_rounded,
                                       color: _isSearchFocused 
                                           ? Colors.teal.shade600 
                                           : Colors.grey.shade500,
@@ -796,7 +920,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                                         ? IconButton(
                                             key: ValueKey('clear'),
                                             icon: Icon(
-                                              Icons.clear,
+                                              Icons.clear_rounded,
                                               color: Colors.grey.shade500,
                                               size: 18,
                                             ),
@@ -829,16 +953,13 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                                   fillColor: Colors.white,
                                   contentPadding: EdgeInsets.symmetric(
                                     horizontal: 20,
-                                    vertical: 16,
+                                    vertical: isSmallScreen ? 14 : 16,
                                   ),
                                 ),
                                 style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: isSmallScreen ? 13 : 14,
                                   color: Colors.grey.shade800,
                                 ),
-                                onChanged: (value) {
-                                  // Trigger filter on change
-                                },
                               ),
                             ),
                           );
@@ -867,246 +988,34 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
                           'Memuat riwayat pasien...',
                           style: TextStyle(
                             color: Colors.grey.shade600,
-                            fontSize: 16,
+                            fontSize: isSmallScreen ? 14 : 16,
                           ),
                         ),
                       ],
                     ),
                   )
                 : errorMessage != null
-                    ? Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade50,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.error_outline_rounded,
-                                  size: 64,
-                                  color: Colors.red.shade400,
-                                ),
-                              ),
-                              SizedBox(height: 16),
-                              Text(
-                                'Terjadi Kesalahan',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.red.shade600,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                errorMessage!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.red.shade500),
-                              ),
-                              SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: _loadRiwayatPasien,
-                                icon: Icon(Icons.refresh_rounded),
-                                label: Text('Coba Lagi'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red.shade400,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
+                    ? _buildErrorWidget(isSmallScreen)
                     : filteredRiwayatPasien.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  padding: EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    searchController.text.isNotEmpty ? Icons.search_off_rounded : Icons.folder_open_rounded,
-                                    size: 64,
-                                    color: Colors.grey.shade400,
-                                  ),
+                        ? _buildEmptyWidget(isSmallScreen)
+                        : FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: RefreshIndicator(
+                              onRefresh: _loadRiwayatPasien,
+                              color: Colors.teal.shade600,
+                              child: Scrollbar(
+                                controller: _scrollController,
+                                child: ListView.builder(
+                                  controller: _scrollController,
+                                  padding: EdgeInsets.all(16),
+                                  physics: BouncingScrollPhysics(),
+                                  itemCount: filteredRiwayatPasien.length,
+                                  itemBuilder: (context, index) {
+                                    final pasien = filteredRiwayatPasien[index];
+                                    return _buildPasienCard(pasien, index, isSmallScreen);
+                                  },
                                 ),
-                                SizedBox(height: 16),
-                                Text(
-                                  searchController.text.isNotEmpty 
-                                      ? 'Tidak ada pasien ditemukan'
-                                      : 'Belum Ada Riwayat Pasien',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  searchController.text.isNotEmpty
-                                      ? 'Coba gunakan kata kunci lain'
-                                      : 'Pasien yang sudah diperiksa akan muncul di sini',
-                                  style: TextStyle(color: Colors.grey.shade500),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          )
-                        : RefreshIndicator(
-                            onRefresh: _loadRiwayatPasien,
-                            color: Colors.teal.shade600,
-                            child: ListView.builder(
-                              padding: EdgeInsets.all(16),
-                              itemCount: filteredRiwayatPasien.length,
-                              itemBuilder: (context, index) {
-                                final pasien = filteredRiwayatPasien[index];
-                                return Container(
-                                  margin: EdgeInsets.only(bottom: 16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 10,
-                                        offset: Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(16),
-                                      onTap: () => _showDetailRiwayat(pasien['id']),
-                                      child: Padding(
-                                        padding: EdgeInsets.all(16),
-                                        child: Row(
-                                          children: [
-                                            // Foto pasien dengan border teal
-                                            Container(
-                                              width: 60,
-                                              height: 60,
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                border: Border.all(
-                                                  color: Colors.teal.shade300,
-                                                  width: 2,
-                                                ),
-                                                image: pasien['pasien']['foto_pasien'] != null
-                                                    ? DecorationImage(
-                                                        image: NetworkImage(
-                                                          'http://10.227.74.71:8000/storage/${pasien['pasien']['foto_pasien']}',
-                                                        ),
-                                                        fit: BoxFit.cover,
-                                                      )
-                                                    : null,
-                                              ),
-                                              child: pasien['pasien']['foto_pasien'] == null
-                                                  ? Icon(
-                                                      Icons.person_rounded,
-                                                      size: 30,
-                                                      color: Colors.teal.shade600,
-                                                    )
-                                                  : null,
-                                            ),
-                                            SizedBox(width: 16),
-                                            
-                                            // Informasi pasien
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    pasien['pasien']['nama_pasien'] ?? 'Nama tidak tersedia',
-                                                    style: TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                      color: Colors.grey.shade800,
-                                                    ),
-                                                  ),
-                                                  SizedBox(height: 6),
-                                                  _buildInfoRow(
-                                                    Icons.calendar_today_rounded,
-                                                    'Tanggal: ${_formatDate(pasien['tanggal_kunjungan'])}',
-                                                    Colors.teal.shade600,
-                                                  ),
-                                                  SizedBox(height: 2),
-                                                  _buildInfoRow(
-                                                    Icons.confirmation_number_rounded,
-                                                    'Antrian: ${pasien['no_antrian'] ?? 'N/A'}',
-                                                    Colors.blue.shade600,
-                                                  ),
-                                                  if (pasien['emr'] != null) ...[
-                                                    SizedBox(height: 2),
-                                                    _buildInfoRow(
-                                                      Icons.medical_services_rounded,
-                                                      'Diagnosis: ${pasien['emr']['diagnosis'] ?? 'N/A'}',
-                                                      Colors.green.shade600,
-                                                    ),
-                                                  ],
-                                                  SizedBox(height: 6),
-                                                  Container(
-                                                    padding: EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 4,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: pasien['status'] == 'Succeed' || pasien['status'] == 'Completed'
-                                                          ? Colors.green.shade100
-                                                          : pasien['status'] == 'Canceled'
-                                                          ? Colors.red.shade100
-                                                          : Colors.orange.shade100,
-                                                      borderRadius: BorderRadius.circular(20),
-                                                    ),
-                                                    child: Text(
-                                                      pasien['status'],
-                                                      style: TextStyle(
-                                                        color: pasien['status'] == 'Succeed' || pasien['status'] == 'Completed'
-                                                            ? Colors.green.shade700
-                                                            : pasien['status'] == 'Canceled'
-                                                            ? Colors.red.shade700
-                                                            : Colors.orange.shade700,
-                                                        fontWeight: FontWeight.w600,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            
-                                            // Arrow icon
-                                            Container(
-                                              padding: EdgeInsets.all(8),
-                                              decoration: BoxDecoration(
-                                                color: Colors.teal.shade50,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                Icons.arrow_forward_ios_rounded,
-                                                color: Colors.teal.shade600,
-                                                size: 16,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
+                              ),
                             ),
                           ),
           ),
@@ -1115,12 +1024,238 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String text, Color color) {
+  Widget _buildErrorWidget(bool isSmallScreen) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.error_outline_rounded,
+                size: isSmallScreen ? 48 : 64,
+                color: Colors.red.shade400,
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Terjadi Kesalahan',
+              style: TextStyle(
+                fontSize: isSmallScreen ? 16 : 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.red.shade600,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              errorMessage!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.red.shade500,
+                fontSize: isSmallScreen ? 13 : 14,
+              ),
+            ),
+            SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _loadRiwayatPasien,
+              icon: Icon(Icons.refresh_rounded),
+              label: Text('Coba Lagi'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade400,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isSmallScreen ? 20 : 24,
+                  vertical: isSmallScreen ? 10 : 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyWidget(bool isSmallScreen) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              searchController.text.isNotEmpty 
+                  ? Icons.search_off_rounded 
+                  : Icons.folder_open_rounded,
+              size: isSmallScreen ? 48 : 64,
+              color: Colors.grey.shade400,
+            ),
+          ),
+          SizedBox(height: 16),
+          Text(
+            searchController.text.isNotEmpty 
+                ? 'Tidak ada pasien ditemukan'
+                : 'Belum Ada Riwayat Pasien',
+            style: TextStyle(
+              fontSize: isSmallScreen ? 16 : 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            searchController.text.isNotEmpty
+                ? 'Coba gunakan kata kunci lain'
+                : 'Pasien yang sudah diperiksa akan muncul di sini',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: isSmallScreen ? 13 : 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPasienCard(dynamic pasien, int index, bool isSmallScreen) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _showDetailRiwayat(pasien['id']),
+          child: Padding(
+            padding: EdgeInsets.all(isSmallScreen ? 14 : 16),
+            child: Row(
+              children: [
+                // Foto pasien dengan border teal
+                Hero(
+                  tag: 'patient_${pasien['id']}',
+                  child: Container(
+                    width: isSmallScreen ? 55 : 60,
+                    height: isSmallScreen ? 55 : 60,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.teal.shade300,
+                        width: 2,
+                      ),
+                      image: pasien['pasien']['foto_pasien'] != null
+                          ? DecorationImage(
+                              image: NetworkImage(
+                                'http://10.227.74.71:8000/storage/${pasien['pasien']['foto_pasien']}',
+                              ),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                    ),
+                    child: pasien['pasien']['foto_pasien'] == null
+                        ? Icon(
+                            Icons.person_rounded,
+                            size: isSmallScreen ? 25 : 30,
+                            color: Colors.teal.shade600,
+                          )
+                        : null,
+                  ),
+                ),
+                SizedBox(width: 16),
+                
+                // Informasi pasien
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        pasien['pasien']['nama_pasien'] ?? 'Nama tidak tersedia',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isSmallScreen ? 14 : 16,
+                          color: Colors.grey.shade800,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 6),
+                      _buildInfoRow(
+                        Icons.calendar_today_rounded,
+                        'Tanggal: ${_formatDate(pasien['tanggal_kunjungan'])}',
+                        Colors.teal.shade600,
+                        isSmallScreen,
+                      ),
+                      SizedBox(height: 2),
+                      _buildInfoRow(
+                        Icons.confirmation_number_rounded,
+                        'Antrian: ${pasien['no_antrian'] ?? 'N/A'}',
+                        Colors.blue.shade600,
+                        isSmallScreen,
+                      ),
+                      if (pasien['emr'] != null && pasien['emr']['diagnosis'] != null) ...[
+                        SizedBox(height: 2),
+                        _buildInfoRow(
+                          Icons.medical_services_rounded,
+                          'Diagnosis: ${pasien['emr']['diagnosis']}',
+                          Colors.green.shade600,
+                          isSmallScreen,
+                        ),
+                      ],
+                      SizedBox(height: 6),
+                      _buildStatusChip(pasien['status'], isSmallScreen),
+                    ],
+                  ),
+                ),
+                
+                // Arrow icon
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Colors.teal.shade600,
+                    size: isSmallScreen ? 14 : 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text, Color color, bool isSmallScreen) {
     return Row(
       children: [
         Icon(
           icon,
-          size: 14,
+          size: isSmallScreen ? 12 : 14,
           color: color,
         ),
         SizedBox(width: 6),
@@ -1129,13 +1264,52 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage> with TickerProvid
             text,
             style: TextStyle(
               color: Colors.grey.shade600,
-              fontSize: 13,
+              fontSize: isSmallScreen ? 11 : 13,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildStatusChip(String? status, bool isSmallScreen) {
+    Color backgroundColor;
+    Color textColor;
+    
+    switch (status?.toLowerCase()) {
+      case 'succeed':
+      case 'completed':
+        backgroundColor = Colors.green.shade100;
+        textColor = Colors.green.shade700;
+        break;
+      case 'canceled':
+        backgroundColor = Colors.red.shade100;
+        textColor = Colors.red.shade700;
+        break;
+      default:
+        backgroundColor = Colors.orange.shade100;
+        textColor = Colors.orange.shade700;
+    }
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmallScreen ? 10 : 12,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        status ?? 'Unknown',
+        style: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w600,
+          fontSize: isSmallScreen ? 10 : 12,
+        ),
+      ),
     );
   }
 }

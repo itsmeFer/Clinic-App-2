@@ -1,18 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:RoyalClinic/pasien/dashboardScreen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:qr_flutter/qr_flutter.dart'; // Tambahkan dependency ini
 
 class Pembayaran extends StatefulWidget {
-  final int? kunjunganId; // Tambahkan parameter ini
-  final bool fromList;    // Tambahkan parameter ini
+  final int? kunjunganId;
+  final bool fromList;
   
   const Pembayaran({
     super.key,
-    this.kunjunganId,      // Tambahkan ini
-    this.fromList = false, // Tambahkan ini dengan default value
+    this.kunjunganId,
+    this.fromList = false,
   });
 
   @override
@@ -23,24 +25,20 @@ class _PembayaranState extends State<Pembayaran> {
   bool isLoading = true;
   String? errorMessage;
   Map<String, dynamic>? pembayaranData;
-  Timer? _statusTimer;
-  Timer? _countdownTimer;
   
-  // Countdown variables
-  int _countdownSeconds = 0;
-  bool _isCountdownActive = false;
-  String _currentOrderId = '';
+  // TAMBAHKAN untuk metode pembayaran dari database
+  List<Map<String, dynamic>> metodePembayaran = [];
+  bool isLoadingMetode = false;
 
   @override
   void initState() {
     super.initState();
     fetchPembayaranData();
+    fetchMetodePembayaran();
   }
 
   @override
   void dispose() {
-    _statusTimer?.cancel();
-    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -53,267 +51,363 @@ class _PembayaranState extends State<Pembayaran> {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt('pasien_id');
   }
-Future<bool> _isFromList() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getBool('from_list_payment') ?? widget.fromList;
-}
-  Future<void> fetchPembayaranData() async {
-  try {
-    final token = await getToken();
-    
-    if (token == null) {
-      setState(() {
-        errorMessage = 'Token tidak ditemukan';
-        isLoading = false;
-      });
-      return;
-    }
 
-    // Check SharedPreferences untuk detect dari list
+  Future<bool> _isFromList() async {
     final prefs = await SharedPreferences.getInstance();
-    final selectedKunjunganId = prefs.getInt('selected_kunjungan_id');
-    final fromListPayment = prefs.getBool('from_list_payment') ?? false;
-
-    String url;
-    
-    if (selectedKunjunganId != null && fromListPayment) {
-      // Dari ListPembayaran - ambil detail specific kunjungan
-      url = 'http://10.227.74.71:8000/api/pembayaran/detail/$selectedKunjunganId';
-      print('🔍 Using specific kunjungan_id from SharedPreferences: $selectedKunjunganId');
-    } else if (widget.kunjunganId != null) {
-      // Dari parameter constructor (fallback)
-      url = 'http://10.227.74.71:8000/api/pembayaran/detail/${widget.kunjunganId}';
-      print('🔍 Using kunjunganId from constructor: ${widget.kunjunganId}');
-    } else {
-      // Original behavior - ambil dari pasien_id
-      final pasienId = await getPasienId();
-      if (pasienId == null) {
-        setState(() {
-          errorMessage = 'ID pasien tidak ditemukan';
-          isLoading = false;
-        });
-        return;
-      }
-      url = 'http://10.227.74.71:8000/api/pembayaran/pasien/$pasienId';
-      print('🔍 Using original behavior with pasien_id: $pasienId');
-    }
-
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    );
-
-    print('📡 fetchPembayaranData - URL: $url');
-    print('📡 fetchPembayaranData - Status: ${response.statusCode}');
-    print('📄 fetchPembayaranData - Body: ${response.body}');
-
-    if (!mounted) return;
-
-    if (response.body.startsWith('<') || response.body.contains('<script>')) {
-      setState(() {
-        errorMessage = 'Server mengembalikan HTML alih-alih JSON. Cek Laravel log untuk error details.';
-        isLoading = false;
-      });
-      return;
-    }
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data['success'] == true) {
-        setState(() {
-          // FIXED: Handle response yang berbeda
-          if (selectedKunjunganId != null && fromListPayment) {
-            // Dari endpoint detail - data langsung
-            pembayaranData = data['data'];
-          } else if (widget.kunjunganId != null) {
-            // Dari parameter constructor - data langsung
-            pembayaranData = data['data'];
-          } else {
-            // Dari endpoint pasien - ambil payment pertama jika multiple
-            if (data['data']['payments'] != null) {
-              pembayaranData = data['data']['payments'][0];
-            } else {
-              pembayaranData = data['data'];
-            }
-          }
-          isLoading = false;
-        });
-      } else {
-        setState(() {
-          errorMessage = data['message'] ?? 'Gagal memuat data pembayaran';
-          isLoading = false;
-        });
-      }
-    } else if (response.statusCode == 404) {
-      final data = jsonDecode(response.body);
-      setState(() {
-        errorMessage = data['message'] ?? 'Tidak ada pembayaran yang menunggu';
-        isLoading = false;
-      });
-    } else {
-      setState(() {
-        errorMessage = 'Gagal memuat data pembayaran (Status: ${response.statusCode})';
-        isLoading = false;
-      });
-    }
-  } catch (e) {
-    print('❌ fetchPembayaranData Error: $e');
-    if (mounted) {
-      setState(() {
-        if (e.toString().contains('FormatException')) {
-          errorMessage = 'Server mengembalikan format tidak valid. Silakan hubungi admin.';
-        } else {
-          errorMessage = 'Kesalahan koneksi: $e';
-        }
-        isLoading = false;
-      });
-    }
+    return prefs.getBool('from_list_payment') ?? widget.fromList;
   }
-}
-  // ... Rest of the methods tetap sama seperti sebelumnya ...
-  // (prosesPembayaran, _processMidtransPayment, dll.)
 
-  Future<void> prosesPembayaran() async {
+  // Method untuk fetch metode pembayaran dari database
+  Future<void> fetchMetodePembayaran() async {
     try {
-      setState(() => isLoading = true);
-
+      setState(() => isLoadingMetode = true);
+      
       final token = await getToken();
       if (token == null) {
-        _showErrorSnackBar('Token tidak ditemukan');
-        setState(() => isLoading = false);
+        _setDefaultMetodePembayaran();
         return;
       }
 
-      await _processMidtransPayment(token);
-
-    } catch (e) {
-      print('Error proses pembayaran: $e');
-      setState(() => isLoading = false);
-      _showErrorSnackBar('Kesalahan: ${e.toString()}');
-    }
-  }
-
-  Future<void> _processMidtransPayment(String token) async {
-    try {
-      final pembayaranId = pembayaranData!['pembayaran_id'];
-      final kunjunganId = pembayaranData!['kunjungan_id'];
-
-      print('🔥 Processing Midtrans Snap payment');
-      print('📋 pembayaran_id: $pembayaranId');
-      print('📋 kunjungan_id: $kunjunganId');
-
-      final requestBody = {
-        'pembayaran_id': pembayaranId,
-        'kunjungan_id': kunjunganId,
-      };
-
-      final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/pembayaran/midtrans/create'),
+      final response = await http.get(
+        Uri.parse('http://10.227.74.71:8000/api/pembayaran/get-data-metode-pembayaran'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: jsonEncode(requestBody),
       );
 
-      print('📡 Midtrans response status: ${response.statusCode}');
-      print('📄 Midtrans response body: ${response.body}');
+      print('📡 fetchMetodePembayaran - Status: ${response.statusCode}');
+      print('📄 fetchMetodePembayaran - Body: ${response.body}');
 
-      if (response.body.startsWith('<') || response.body.contains('<script>')) {
-        setState(() => isLoading = false);
-        _showErrorSnackBar('Server error: Laravel mengembalikan debug page alih-alih JSON');
-        return;
-      }
+      if (!mounted) return;
 
-      if (response.body.trim().isEmpty) {
-        setState(() => isLoading = false);
-        _showErrorSnackBar('Server mengembalikan response kosong');
-        return;
-      }
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        setState(() => isLoading = false);
-        
-        final snapToken = data['data']['snap_token'];
-        final orderId = data['data']['order_id'];
-        
-        await _openMidtransSnap(snapToken, orderId);
-      } else {
-        setState(() => isLoading = false);
-        String errorMsg = data['message'] ?? 'Gagal membuat transaksi Midtrans';
-        if (data.containsKey('debug')) {
-          errorMsg += '\nDebug: ${data['debug']}';
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            metodePembayaran = List<Map<String, dynamic>>.from(data['data']);
+            isLoadingMetode = false;
+          });
+          print('✅ Loaded ${metodePembayaran.length} metode pembayaran from database');
+        } else {
+          _setDefaultMetodePembayaran();
         }
-        _showErrorSnackBar(errorMsg);
+      } else {
+        _setDefaultMetodePembayaran();
       }
     } catch (e) {
-      print('❌ Error Midtrans payment: $e');
-      setState(() => isLoading = false);
+      print('❌ fetchMetodePembayaran Error: $e');
+      _setDefaultMetodePembayaran();
+    }
+  }
+
+  void _setDefaultMetodePembayaran() {
+    setState(() {
+      metodePembayaran = [
+        {'id': null, 'nama_metode': 'Tunai / Cash', 'icon': '💰'},
+        {'id': null, 'nama_metode': 'Kartu Debit/Kredit', 'icon': '💳'},
+        {'id': null, 'nama_metode': 'QRIS (Scan QR)', 'icon': '📱'},
+        {'id': null, 'nama_metode': 'Transfer Bank', 'icon': '🏦'},
+      ];
+      isLoadingMetode = false;
+    });
+    print('⚠️ Using default metode pembayaran');
+  }
+
+  Future<void> fetchPembayaranData() async {
+    try {
+      final token = await getToken();
       
-      if (e.toString().contains('FormatException')) {
-        _showErrorSnackBar('Server error: Response bukan JSON valid. Cek Laravel log.');
+      if (token == null) {
+        setState(() {
+          errorMessage = 'Token tidak ditemukan';
+          isLoading = false;
+        });
+        return;
+      }
+
+      // Check SharedPreferences untuk detect dari list
+      final prefs = await SharedPreferences.getInstance();
+      final selectedKunjunganId = prefs.getInt('selected_kunjungan_id');
+      final fromListPayment = prefs.getBool('from_list_payment') ?? false;
+
+      String url;
+      
+      if (selectedKunjunganId != null && fromListPayment) {
+        // Dari ListPembayaran - ambil detail specific kunjungan
+        url = 'http://10.227.74.71:8000/api/pembayaran/detail/$selectedKunjunganId';
+        print('🔍 Using specific kunjungan_id from SharedPreferences: $selectedKunjunganId');
+      } else if (widget.kunjunganId != null) {
+        // Dari parameter constructor (fallback)
+        url = 'http://10.227.74.71:8000/api/pembayaran/detail/${widget.kunjunganId}';
+        print('🔍 Using kunjunganId from constructor: ${widget.kunjunganId}');
       } else {
-        _showErrorSnackBar('Kesalahan Midtrans: ${e.toString()}');
+        // Original behavior - ambil dari pasien_id
+        final pasienId = await getPasienId();
+        if (pasienId == null) {
+          setState(() {
+            errorMessage = 'ID pasien tidak ditemukan';
+            isLoading = false;
+          });
+          return;
+        }
+        url = 'http://10.227.74.71:8000/api/pembayaran/pasien/$pasienId';
+        print('🔍 Using original behavior with pasien_id: $pasienId');
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      print('📡 fetchPembayaranData - URL: $url');
+      print('📡 fetchPembayaranData - Status: ${response.statusCode}');
+      print('📄 fetchPembayaranData - Body: ${response.body}');
+
+      if (!mounted) return;
+
+      if (response.body.startsWith('<') || response.body.contains('<script>')) {
+        setState(() {
+          errorMessage = 'Server mengembalikan HTML alih-alih JSON. Cek Laravel log untuk error details.';
+          isLoading = false;
+        });
+        return;
+      }
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          setState(() {
+            // Handle response yang berbeda
+            if (selectedKunjunganId != null && fromListPayment) {
+              // Dari endpoint detail - data langsung
+              pembayaranData = data['data'];
+            } else if (widget.kunjunganId != null) {
+              // Dari parameter constructor - data langsung
+              pembayaranData = data['data'];
+            } else {
+              // Dari endpoint pasien - ambil payment pertama jika multiple
+              if (data['data']['payments'] != null) {
+                pembayaranData = data['data']['payments'][0];
+              } else {
+                pembayaranData = data['data'];
+              }
+            }
+            isLoading = false;
+          });
+          
+          // Debug print kode transaksi dan metode pembayaran
+          print('🔍 Kode Transaksi: ${pembayaranData?['kode_transaksi']}');
+          print('🔍 Metode Pembayaran: ${pembayaranData?['metode_pembayaran']}');
+          print('🔍 Metode Pembayaran Nama: ${pembayaranData?['metode_pembayaran_nama']}');
+        } else {
+          setState(() {
+            errorMessage = data['message'] ?? 'Gagal memuat data pembayaran';
+            isLoading = false;
+          });
+        }
+      } else if (response.statusCode == 400) {
+        // HANDLE: Status 400 could mean payment is already completed
+        final data = jsonDecode(response.body);
+        if (data['message']?.toString().toLowerCase().contains('sudah selesai') == true) {
+          // Payment is completed, create mock data for display
+          setState(() {
+            pembayaranData = {
+              'status_pembayaran': 'Sudah Bayar',
+              'kode_transaksi': 'COMPLETED',
+              'total_tagihan': 0,
+              'pasien': {'nama_pasien': 'Pasien'},
+              'poli': {'nama_poli': 'Umum'},
+              'tanggal_kunjungan': DateTime.now().toString(),
+              'no_antrian': '-',
+              'diagnosis': 'Pembayaran sudah selesai',
+              'layanan': [],
+              'resep_obat': [],
+              'total_layanan': 0,
+              'total_obat': 0,
+            };
+            isLoading = false;
+          });
+          
+          // Auto show success dialog since payment is completed
+          Future.delayed(Duration(milliseconds: 500), () {
+            if (mounted) {
+              _showPaymentSuccessDialog();
+            }
+          });
+        } else {
+          setState(() {
+            errorMessage = data['message'] ?? 'Gagal memuat data pembayaran';
+            isLoading = false;
+          });
+        }
+      } else if (response.statusCode == 404) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          errorMessage = data['message'] ?? 'Tidak ada pembayaran yang menunggu';
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          errorMessage = 'Gagal memuat data pembayaran (Status: ${response.statusCode})';
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ fetchPembayaranData Error: $e');
+      if (mounted) {
+        setState(() {
+          if (e.toString().contains('FormatException')) {
+            errorMessage = 'Server mengembalikan format tidak valid. Silakan hubungi admin.';
+          } else {
+            errorMessage = 'Kesalahan koneksi: $e';
+          }
+          isLoading = false;
+        });
       }
     }
   }
 
-  Future<void> _openMidtransSnap(String snapToken, String orderId) async {
-    print('🚀 Opening Midtrans Snap with token: ${snapToken.substring(0, 20)}...');
-    print('🎫 Order ID: $orderId');
-    
-    _currentOrderId = orderId;
-    
-    final result = await showDialog<String>(
+  // CHANGED: Check payment status without showing cashier dialog
+  Future<void> cekStatusPembayaran() async {
+    try {
+      setState(() => isLoading = true);
+      
+      // Refresh payment data to get latest status
+      await fetchPembayaranData();
+      
+      if (!mounted) return;
+      
+      setState(() => isLoading = false);
+      
+      // Check if payment is now completed
+      if (pembayaranData != null && pembayaranData!['status_pembayaran'] == 'Sudah Bayar') {
+        _showPaymentSuccessDialog();
+      } else {
+        // Still not paid, show info message
+        _showErrorSnackBar('Pembayaran belum selesai. Silakan cek kembali setelah melakukan pembayaran di kasir.');
+      }
+    } catch (e) {
+      print('Error cek status pembayaran: $e');
+      setState(() => isLoading = false);
+      _showErrorSnackBar('Kesalahan: ${e.toString()}');
+    }
+  }
+
+  // NEW: Show payment success dialog with navigation to dashboard
+  void _showPaymentSuccessDialog() {
+    showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        insetPadding: EdgeInsets.all(10),
-        child: Container(
-          width: double.maxFinite,
-          height: MediaQuery.of(context).size.height * 0.9,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Container(
+          padding: EdgeInsets.symmetric(vertical: 20),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
+              // Success animation container
               Container(
-                padding: EdgeInsets.all(16),
+                width: 80,
+                height: 80,
                 decoration: BoxDecoration(
-                  color: Color(0xFF00897B),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    topRight: Radius.circular(8),
-                  ),
+                  color: Colors.green.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.check_circle,
+                  color: Colors.green.shade600,
+                  size: 50,
+                ),
+              ),
+              SizedBox(height: 24),
+              
+              // Success title
+              Text(
+                'Pembayaran Berhasil!',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              
+              SizedBox(height: 12),
+              
+              // Success message
+              Text(
+                'Terima kasih! Pembayaran Anda telah berhasil diproses.',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade700,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              
+              SizedBox(height: 8),
+              
+              // Additional info
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.payment, color: Colors.white, size: 20),
-                    SizedBox(width: 12),
+                    Icon(Icons.info_outline, color: Colors.blue.shade600, size: 20),
+                    SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Pembayaran Midtrans',
+                        'Anda dapat mengambil obat di apoteker klinik',
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: Colors.blue.shade700,
                         ),
                       ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context, 'cancel'),
-                      icon: Icon(Icons.close, color: Colors.white),
                     ),
                   ],
                 ),
               ),
-              Expanded(
-                child: WebViewWidget(
-                  controller: _createMidtransWebController(snapToken, orderId),
+              
+              SizedBox(height: 24),
+              
+              // OK button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close dialog
+                    
+                    // Navigate to MainWrapper (dashboard) - replace all routes
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => const MainWrapper()),
+                      (route) => false,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF00897B),
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                  child: Text(
+                    'Kembali ke Dashboard',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -321,184 +415,156 @@ Future<bool> _isFromList() async {
         ),
       ),
     );
-
-    if (result == 'success') {
-      print('✅ Payment success from WebView');
-      await _handlePaymentSuccess(orderId);
-    } else if (result == 'failed' || result == 'cancel') {
-      setState(() => isLoading = false);
-      _showErrorSnackBar('Pembayaran dibatalkan');
-    }
   }
 
-  Future<void> _handlePaymentSuccess(String orderId) async {
-    print('🎉 Handling payment success for order: $orderId');
+  // NEW: Show QR Code dialog
+  void _showQRCodeDialog() {
+    final kodeTransaksi = pembayaranData?['kode_transaksi'];
     
-    setState(() => isLoading = true);
-    _startCountdownTimer(orderId);
-    
-    await Future.delayed(Duration(seconds: 2));
-    bool isPaid = await _checkPaymentStatus(orderId);
-    
-    if (isPaid) {
-      _stopCountdown();
-      _showSuccessDialog();
-      if (widget.fromList) {
-        // Jika dari list, kembali ke list
-        Navigator.pop(context);
-      } else {
-        await fetchPembayaranData();
-      }
-    } else {
-      await _executeFallbackStrategy(orderId);
-    }
-  }
-
-  void _startCountdownTimer(String orderId) {
-    print('⏰ Starting countdown timer for order: $orderId');
-    
-    setState(() {
-      _isCountdownActive = true;
-      _countdownSeconds = 120;
-      _currentOrderId = orderId;
-    });
-    
-    _countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      
-      setState(() {
-        _countdownSeconds--;
-      });
-      
-      if (_countdownSeconds % 10 == 0) {
-        _checkPaymentStatus(orderId).then((isPaid) {
-          if (isPaid) {
-            _stopCountdown();
-            _showSuccessDialog();
-            if (widget.fromList) {
-              Navigator.pop(context);
-            } else {
-              fetchPembayaranData();
-            }
-          }
-        });
-      }
-      
-      if (_countdownSeconds <= 0) {
-        timer.cancel();
-        _executeForcePaymentUpdate(orderId);
-      }
-    });
-  }
-
-  void _stopCountdown() {
-    _countdownTimer?.cancel();
-    _statusTimer?.cancel();
-    setState(() {
-      _isCountdownActive = false;
-      _countdownSeconds = 0;
-      isLoading = false;
-    });
-  }
-
-  Future<void> _executeFallbackStrategy(String orderId) async {
-    print('🔄 Executing fallback strategy for order: $orderId');
-    
-    for (int i = 0; i < 5; i++) {
-      await Future.delayed(Duration(seconds: 3));
-      bool isPaid = await _checkPaymentStatus(orderId);
-      if (isPaid) {
-        _stopCountdown();
-        _showSuccessDialog();
-        if (widget.fromList) {
-          Navigator.pop(context);
-        } else {
-          await fetchPembayaranData();
-        }
-        return;
-      }
-    }
-    
-    print('💪 Force updating payment status');
-    bool forceUpdated = await _forceUpdatePaymentStatus();
-    if (forceUpdated) {
-      _stopCountdown();
-      _showSuccessDialog();
-      if (widget.fromList) {
-        Navigator.pop(context);
-      } else {
-        await fetchPembayaranData();
-      }
+    if (kodeTransaksi == null) {
+      _showErrorSnackBar('Kode transaksi tidak tersedia');
       return;
     }
-    
-    _showManualConfirmationDialog(orderId);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Icon(Icons.qr_code, color: Color(0xFF00897B), size: 24),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'QR Code Pembayaran',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
+              
+              // QR Code
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: QrImageView(
+                  data: kodeTransaksi,
+                  version: QrVersions.auto,
+                  size: 200.0,
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                ),
+              ),
+              
+              SizedBox(height: 16),
+              
+              // Kode Transaksi Text
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Kode Transaksi:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    SelectableText(
+                      kodeTransaksi,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade800,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              SizedBox(height: 16),
+              
+              // Copy button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: kodeTransaksi));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Kode transaksi disalin ke clipboard'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  icon: Icon(Icons.copy, size: 18),
+                  label: Text('Salin Kode'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF00897B),
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              
+              SizedBox(height: 12),
+              
+              Text(
+                'Tunjukkan QR code ini kepada petugas kasir atau salin kode transaksi untuk pembayaran',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  Future<void> _executeForcePaymentUpdate(String orderId) async {
-    print('🚨 Countdown finished, executing force payment update');
+  // UPDATED: Show payment at cashier dialog dengan kode transaksi dan metode pembayaran dari database
+  void _showPaymentAtCashierDialog() {
+    setState(() => isLoading = false);
     
-    bool updated = await _forceUpdatePaymentStatus();
-    
-    if (updated) {
-      _showSuccessDialog();
-      if (widget.fromList) {
-        Navigator.pop(context);
-      } else {
-        await fetchPembayaranData();
-      }
-    } else {
-      _showManualConfirmationDialog(orderId);
-    }
-    
-    setState(() {
-      _isCountdownActive = false;
-      isLoading = false;
-    });
-  }
-
-  Future<bool> _forceUpdatePaymentStatus() async {
-    try {
-      final token = await getToken();
-      if (token == null) return false;
-      
-      final pembayaranId = pembayaranData?['pembayaran_id'];
-      if (pembayaranId == null) return false;
-      
-      print('💪 Force updating payment status for pembayaran_id: $pembayaranId');
-      
-      final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/pembayaran/force-update'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'pembayaran_id': pembayaranId,
-          'metode_pembayaran': 'Midtrans',
-        }),
-      );
-      
-      print('📡 Force update response: ${response.statusCode}');
-      print('📄 Force update body: ${response.body}');
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['success'] == true;
-      }
-      
-      return false;
-    } catch (e) {
-      print('❌ Error force updating payment: $e');
-      return false;
-    }
-  }
-
-  void _showManualConfirmationDialog(String orderId) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -506,9 +572,9 @@ Future<bool> _isFromList() async {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(Icons.help_outline, color: Colors.orange, size: 24),
+            Icon(Icons.store, color: Color(0xFF00897B), size: 24),
             SizedBox(width: 12),
-            Text('Konfirmasi Pembayaran'),
+            Text('Pembayaran di Kasir'),
           ],
         ),
         content: Column(
@@ -516,10 +582,77 @@ Future<bool> _isFromList() async {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Sistem sedang memproses pembayaran Anda.',
+              'Silakan lakukan pembayaran di kasir klinik',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             SizedBox(height: 16),
+            
+            // TAMPILKAN KODE TRANSAKSI JIKA ADA
+            if (pembayaranData?['kode_transaksi'] != null) ...[
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.receipt_long, color: Colors.orange.shade700, size: 16),
+                        SizedBox(width: 8),
+                        Text(
+                          'Kode Transaksi:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                        Spacer(),
+                        // NEW: QR Code button
+                        IconButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showQRCodeDialog();
+                          },
+                          icon: Icon(Icons.qr_code, 
+                            color: Colors.orange.shade700, 
+                            size: 20
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints(minWidth: 24, minHeight: 24),
+                          tooltip: 'Tampilkan QR Code',
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    SelectableText(
+                      pembayaranData!['kode_transaksi'],
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade800,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Tunjukkan kode ini kepada kasir',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.orange.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16),
+            ],
+            
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -530,21 +663,106 @@ Future<bool> _isFromList() async {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Order ID: $orderId',
-                    style: TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                    'Total Pembayaran:',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Status: Menunggu konfirmasi',
-                    style: TextStyle(fontSize: 12),
+                    formatCurrency(pembayaranData!['total_tagihan']),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF00897B),
+                    ),
                   ),
                 ],
               ),
             ),
             SizedBox(height: 16),
+            
+            // TAMPILKAN METODE PEMBAYARAN DARI DATABASE
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.payment, color: Colors.green.shade700, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'Metode Pembayaran Tersedia:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  
+                  // DYNAMIC PAYMENT METHODS dari database
+                  if (isLoadingMetode)
+                    Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.green.shade600,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (metodePembayaran.isEmpty)
+                    Text(
+                      '• Metode pembayaran akan ditentukan di kasir',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green.shade600,
+                      ),
+                    )
+                  else
+                    ...metodePembayaran.map((metode) {
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            Text(
+                              metode['icon'] ?? '💳',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '• ${metode['nama_metode'] ?? 'Unknown'}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green.shade600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
             Text(
-              'Apakah pembayaran Anda sudah berhasil di aplikasi/website Midtrans?',
-              style: TextStyle(fontSize: 14),
+              pembayaranData?['kode_transaksi'] != null 
+                  ? 'Tunjukkan kode transaksi ini kepada petugas kasir. Anda dapat memilih metode pembayaran yang diinginkan di kasir.'
+                  : 'Silakan menuju kasir untuk menyelesaikan pembayaran. Anda dapat memilih metode pembayaran yang diinginkan di kasir.',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -552,180 +770,34 @@ Future<bool> _isFromList() async {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              setState(() => isLoading = false);
-              _showErrorSnackBar('Silakan coba lagi atau hubungi customer service');
             },
-            child: Text('Belum Bayar'),
+            child: Text('Batal'),
           ),
+          if (pembayaranData?['kode_transaksi'] != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _showQRCodeDialog();
+              },
+              child: Text('QR Code'),
+              style: TextButton.styleFrom(
+                foregroundColor: Color(0xFF00897B),
+              ),
+            ),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(context);
-              setState(() => isLoading = true);
-              
-              bool updated = await _forceUpdatePaymentStatus();
-              
-              if (updated) {
-                _showSuccessDialog();
-                if (widget.fromList) {
-                  Navigator.pop(context);
-                } else {
-                  await fetchPembayaranData();
-                }
-              } else {
-                setState(() => isLoading = false);
-                _showErrorSnackBar('Gagal mengupdate status. Silakan hubungi customer service.');
-              }
+              _showSuccessDialog();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Color(0xFF00897B),
               foregroundColor: Colors.white,
             ),
-            child: Text('Sudah Bayar'),
+            child: Text('Menuju Kasir'),
           ),
         ],
       ),
     );
-  }
-
-  Future<bool> _checkPaymentStatus(String orderId) async {
-    try {
-      final token = await getToken();
-      if (token == null) return false;
-
-      print('🔍 Checking payment status for order: $orderId');
-
-      final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/pembayaran/status/$orderId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      );
-
-      if (response.body.startsWith('<') || response.body.contains('<script>')) {
-        print('❌ checkPaymentStatus mengembalikan HTML, bukan JSON');
-        return false;
-      }
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        
-        if (data['success'] == true && data['data']['status'] == 'Sudah Bayar') {
-          print('✅ Payment confirmed as Sudah Bayar');
-          
-          setState(() {
-            if (pembayaranData != null) {
-              pembayaranData!['status_pembayaran'] = 'Sudah Bayar';
-            }
-          });
-          
-          return true;
-        } else {
-          print('⏳ Payment still pending: ${data['data']['status']}');
-        }
-      }
-      
-      return false;
-    } catch (e) {
-      print('❌ Error checking payment status: $e');
-      return false;
-    }
-  }
-
-  WebViewController _createMidtransWebController(String snapToken, String orderId) {
-    final controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (String url) {
-            print('🌐 WebView started: $url');
-            
-            if (url.contains('transaction_status=settlement') || 
-                url.contains('transaction_status=capture') ||
-                url.contains('#success')) {
-              print('✅ Success detected in URL');
-              Navigator.pop(context, 'success');
-            } 
-            else if (url.contains('transaction_status=deny') ||
-                    url.contains('transaction_status=cancel') ||
-                    url.contains('#error') || 
-                    url.contains('#cancel')) {
-              print('❌ Cancel/Error detected in URL');
-              Navigator.pop(context, 'failed');
-            }
-          },
-          onPageFinished: (String url) {
-            print('✅ WebView finished loading: $url');
-          },
-        ),
-      )
-      ..loadHtmlString(_buildMidtransHTML(snapToken, orderId));
-
-    return controller;
-  }
-
-  String _buildMidtransHTML(String snapToken, String orderId) {
-    return '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background-color: #f8f9fa; text-align: center; }
-        .loading { padding: 20px; color: #00897B; font-size: 14px; }
-        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #00897B; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 15px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .info { background: #e8f5e8; padding: 10px; border-radius: 8px; margin: 10px; font-size: 11px; color: #2e7d32; }
-    </style>
-</head>
-<body>
-    <div class="loading">
-        <div class="spinner"></div>
-        <p>Memuat metode pembayaran...</p>
-        <div class="info">
-            Mode: Sandbox Testing<br>
-            Kartu test: 4811111111111114<br>
-            CVV: 123, Exp: 12/25<br>
-            Order ID: $orderId
-        </div>
-    </div>
-    <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="SB-Mid-client-bGhklB38Vbu_wCxb"></script>
-    <script type="text/javascript">
-        window.onload = function() {
-            setTimeout(function() {
-                snap.pay('$snapToken', {
-                    onSuccess: function(result) {
-                        console.log('✅ Payment SUCCESS:', result);
-                        window.location.href = 'about:blank?transaction_status=settlement#success';
-                    },
-                    onPending: function(result) {
-                        console.log('⏳ Payment PENDING:', result);
-                        window.location.href = 'about:blank?transaction_status=settlement#success';
-                    },
-                    onError: function(result) {
-                        console.log('❌ Payment ERROR:', result);
-                        window.location.href = 'about:blank?transaction_status=deny#error';
-                    },
-                    onClose: function() {
-                        console.log('🚪 Payment popup CLOSED');
-                        window.location.href = 'about:blank?transaction_status=cancel#cancel';
-                    }
-                });
-            }, 1000);
-        };
-    </script>
-</body>
-</html>
-''';
-  }
-
-  String _formatCountdown(int seconds) {
-    int minutes = seconds ~/ 60;
-    int remainingSeconds = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
   void _showSuccessDialog() {
@@ -751,7 +823,7 @@ Future<bool> _isFromList() async {
             ),
             const SizedBox(height: 24),
             const Text(
-              'Pembayaran Berhasil!',
+              'Siap untuk Pembayaran!',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
@@ -759,7 +831,9 @@ Future<bool> _isFromList() async {
             ),
             const SizedBox(height: 12),
             Text(
-              'Terima kasih telah melakukan pembayaran.\nSilakan ambil obat di apoteker klinik.',
+              pembayaranData?['kode_transaksi'] != null
+                  ? 'Silakan menuju kasir untuk menyelesaikan pembayaran dengan kode transaksi yang telah diberikan.\nSetelah pembayaran selesai, Anda dapat mengambil obat di apoteker.'
+                  : 'Silakan menuju kasir untuk menyelesaikan pembayaran.\nSetelah pembayaran selesai, Anda dapat mengambil obat di apoteker.',
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey.shade600,
@@ -884,18 +958,16 @@ Future<bool> _isFromList() async {
         foregroundColor: Colors.black87,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black87),
+        automaticallyImplyLeading: false, // REMOVE back button
         actions: [
-          if (!widget.fromList) // Hanya tampilkan refresh jika bukan dari list
+          // NEW: QR Code action button (keep only this one)
+          if (pembayaranData?['kode_transaksi'] != null)
             IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () {
-                setState(() {
-                  isLoading = true;
-                  errorMessage = null;
-                });
-                fetchPembayaranData();
-              },
+              icon: const Icon(Icons.qr_code),
+              onPressed: _showQRCodeDialog,
+              tooltip: 'Tampilkan QR Code',
             ),
+          // REMOVED: Refresh button
         ],
       ),
       body: Stack(
@@ -912,47 +984,6 @@ Future<bool> _isFromList() async {
                   : pembayaranData == null
                       ? _buildNoDataState()
                       : _buildContent(),
-          
-          // Countdown overlay
-          if (_isCountdownActive)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.orange.shade400, Colors.orange.shade600],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  bottom: false,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.timer, color: Colors.white, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Memproses pembayaran... ${_formatCountdown(_countdownSeconds)}',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -1012,6 +1043,7 @@ Future<bool> _isFromList() async {
                     errorMessage = null;
                   });
                   fetchPembayaranData();
+                  fetchMetodePembayaran();
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF00897B),
@@ -1058,10 +1090,6 @@ Future<bool> _isFromList() async {
   Widget _buildContent() {
     return Column(
       children: [
-        // Add space for countdown if active
-        if (_isCountdownActive)
-          SizedBox(height: 60),
-        
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -1128,7 +1156,7 @@ Future<bool> _isFromList() async {
                 Text(
                   isPaymentComplete 
                       ? 'Silakan ambil obat di apoteker klinik'
-                      : 'Silakan lakukan pembayaran terlebih dahulu',
+                      : 'Silakan lakukan pembayaran di kasir terlebih dahulu',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade600,
@@ -1142,6 +1170,7 @@ Future<bool> _isFromList() async {
     );
   }
 
+  // UPDATED: Tambahkan kode transaksi ke patient info dengan QR code button
   Widget _buildPatientInfo() {
     final pasien = pembayaranData!['pasien'];
     final poli = pembayaranData!['poli'];
@@ -1193,6 +1222,71 @@ Future<bool> _isFromList() async {
           _buildInfoRow('Tanggal', formatDate(tanggalKunjungan ?? '')),
           _buildInfoRow('No. Antrian', pembayaranData!['no_antrian'] ?? '-'),
           _buildInfoRow('Diagnosis', pembayaranData!['diagnosis'] ?? '-'),
+          
+          // TAMBAHKAN KODE TRANSAKSI DI SINI dengan QR button
+          if (pembayaranData!['kode_transaksi'] != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.orange.shade200, width: 1),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.qr_code,
+                    color: Colors.orange.shade700,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Kode Transaksi:',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.orange.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        SelectableText(
+                          pembayaranData!['kode_transaksi'],
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade800,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // NEW: QR Code mini button
+                  IconButton(
+                    onPressed: _showQRCodeDialog,
+                    icon: Icon(Icons.fullscreen, 
+                      color: Colors.orange.shade700, 
+                      size: 16
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Lihat QR Code',
+                  ),
+                ],
+              ),
+            ),
+          ],
+          
+          // TAMPILKAN METODE PEMBAYARAN JIKA ADA
+          if (pembayaranData!['metode_pembayaran_nama'] != null || pembayaranData!['metode_pembayaran'] != null)
+            _buildInfoRow(
+              'Metode Pembayaran',
+              pembayaranData!['metode_pembayaran_nama'] ?? pembayaranData!['metode_pembayaran'] ?? 'Cash'
+            ),
         ],
       ),
     );
@@ -1200,7 +1294,6 @@ Future<bool> _isFromList() async {
 
   Widget _buildMedicalServices() {
     final layananList = pembayaranData!['layanan'] as List<dynamic>? ?? [];
-    final totalLayanan = toDoubleValue(pembayaranData!['total_layanan'] ?? 0);
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1553,29 +1646,70 @@ Future<bool> _isFromList() async {
                 ],
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton.icon(
-                  onPressed: canMakePayment ? prosesPembayaran : null,
-                  icon: Icon(Icons.payment, size: 20),
-                  label: Text(
-                    'Bayar dengan Midtrans',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+              
+              // NEW: Two buttons side by side
+              Row(
+                children: [
+                  // Bayar Nanti button
+                  Expanded(
+                    flex: 1,
+                    child: SizedBox(
+                      height: 56,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          // Navigate back to ListPembayaran
+                          Navigator.of(context).pop();
+                        },
+                        icon: Icon(Icons.schedule, size: 20),
+                        label: Text(
+                          'Bayar Nanti',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade600,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                      ),
                     ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00897B),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  
+                  const SizedBox(width: 12),
+                  
+                  // Cek Status Pembayaran button
+                  Expanded(
+                    flex: 2,
+                    child: SizedBox(
+                      height: 56,
+                      child: ElevatedButton.icon(
+                        onPressed: canMakePayment ? cekStatusPembayaran : null,
+                        icon: Icon(Icons.refresh, size: 20),
+                        label: Text(
+                          'Cek Status Pembayaran',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00897B),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          elevation: 2,
+                        ),
+                      ),
                     ),
-                    disabledBackgroundColor: Colors.grey.shade300,
-                    elevation: 2,
                   ),
-                ),
+                ],
               ),
             ],
           ),

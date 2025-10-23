@@ -16,8 +16,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
   String? errorMessage;
   Map<String, dynamic>? pembayaranData;
   List<dynamic> paymentsList = [];
-  List<int> selectedPayments = []; // Untuk multiple selection
-  bool selectAll = false;
+  int? selectedPayment; 
 
   @override
   void initState() {
@@ -104,74 +103,62 @@ class _ListPembayaranState extends State<ListPembayaran> {
     }
   }
 
+  // SIMPLIFIED: Only toggle single payment selection
   void togglePaymentSelection(int kunjunganId) {
     setState(() {
-      if (selectedPayments.contains(kunjunganId)) {
-        selectedPayments.remove(kunjunganId);
+      if (selectedPayment == kunjunganId) {
+        selectedPayment = null; // Unselect if already selected
       } else {
-        selectedPayments.add(kunjunganId);
-      }
-      
-      // Update select all status
-      selectAll = selectedPayments.length == paymentsList.length;
-    });
-  }
-
-  void toggleSelectAll() {
-    setState(() {
-      if (selectAll) {
-        selectedPayments.clear();
-        selectAll = false;
-      } else {
-        selectedPayments = paymentsList.map((payment) => payment['kunjungan_id'] as int).toList();
-        selectAll = true;
+        selectedPayment = kunjunganId; // Select new payment
       }
     });
   }
 
+  // SIMPLIFIED: Get selected total for single payment
   double getSelectedTotal() {
-    double total = 0;
-    for (var payment in paymentsList) {
-      if (selectedPayments.contains(payment['kunjungan_id'])) {
-        total += toDoubleValue(payment['total_tagihan']);
-      }
-    }
-    return total;
+    if (selectedPayment == null) return 0.0;
+    
+    final payment = paymentsList.firstWhere(
+      (payment) => payment['kunjungan_id'] == selectedPayment,
+      orElse: () => null,
+    );
+    
+    return payment != null ? toDoubleValue(payment['total_tagihan']) : 0.0;
   }
 
+  // SIMPLIFIED: Handle single payment
   void bayarTerpilih() async {
-    if (selectedPayments.isEmpty) {
+    if (selectedPayment == null) {
       _showErrorSnackBar('Pilih pembayaran yang ingin dibayar');
       return;
     }
 
-    if (selectedPayments.length == 1) {
-      // Simpan kunjungan_id yang dipilih ke SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('selected_kunjungan_id', selectedPayments.first);
-      await prefs.setBool('from_list_payment', true);
+    // Save selected kunjungan_id to SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('selected_kunjungan_id', selectedPayment!);
+    await prefs.setBool('from_list_payment', true);
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Pembayaran(),
+      ),
+    ).then((_) async {
+      // Clear selected kunjungan_id after completion
+      await prefs.remove('selected_kunjungan_id');
+      await prefs.remove('from_list_payment');
+      // Refresh list after returning from payment
+      fetchListPembayaran();
       
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => Pembayaran(), // Tanpa parameter
-        ),
-      ).then((_) async {
-        // Clear selected kunjungan_id setelah selesai
-        await prefs.remove('selected_kunjungan_id');
-        await prefs.remove('from_list_payment');
-        // Refresh list setelah kembali dari pembayaran
-        fetchListPembayaran();
+      // Clear selection
+      setState(() {
+        selectedPayment = null;
       });
-    } else {
-      // Multiple payment - bisa implementasi pembayaran gabungan di sini
-      _showInfoDialog('Multi Payment', 
-        'Fitur pembayaran multiple sedang dalam pengembangan.\nSilakan bayar satu per satu terlebih dahulu.');
-    }
+    });
   }
 
   void lihatDetail(int kunjunganId) async {
-    // Simpan kunjungan_id yang dipilih ke SharedPreferences
+    // Save selected kunjungan_id to SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('selected_kunjungan_id', kunjunganId);
     await prefs.setBool('from_list_payment', true);
@@ -179,13 +166,13 @@ class _ListPembayaranState extends State<ListPembayaran> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => Pembayaran(), // Tanpa parameter
+        builder: (context) => Pembayaran(),
       ),
     ).then((_) async {
-      // Clear selected kunjungan_id setelah selesai
+      // Clear selected kunjungan_id after completion
       await prefs.remove('selected_kunjungan_id');
       await prefs.remove('from_list_payment');
-      // Refresh list setelah kembali dari pembayaran
+      // Refresh list after returning from payment
       fetchListPembayaran();
     });
   }
@@ -241,22 +228,6 @@ class _ListPembayaranState extends State<ListPembayaran> {
     );
   }
 
-  void _showInfoDialog(String title, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -292,7 +263,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
               : paymentsList.isEmpty
                   ? _buildNoDataState()
                   : _buildContent(),
-      bottomNavigationBar: paymentsList.isNotEmpty && selectedPayments.isNotEmpty
+      bottomNavigationBar: paymentsList.isNotEmpty && selectedPayment != null
           ? _buildBottomCheckoutBar()
           : null,
     );
@@ -438,44 +409,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
           ),
         ),
 
-        // Select All Checkbox
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Row(
-            children: [
-              Checkbox(
-                value: selectAll,
-                onChanged: (_) => toggleSelectAll(),
-                activeColor: const Color(0xFF00897B),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Pilih Semua',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              if (selectedPayments.isNotEmpty)
-                Text(
-                  '${selectedPayments.length} dipilih',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 8),
+        // REMOVED: Select All Checkbox section
 
         // List Pembayaran
         Expanded(
@@ -484,7 +418,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
             itemCount: paymentsList.length,
             itemBuilder: (context, index) {
               final payment = paymentsList[index];
-              final isSelected = selectedPayments.contains(payment['kunjungan_id']);
+              final isSelected = selectedPayment == payment['kunjungan_id'];
               
               return _buildPaymentCard(payment, isSelected);
             },
@@ -512,174 +446,193 @@ class _ListPembayaranState extends State<ListPembayaran> {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          // Header dengan checkbox
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFF00897B).withOpacity(0.1) : null,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: isSelected,
-                  onChanged: (_) => togglePaymentSelection(payment['kunjungan_id']),
-                  activeColor: const Color(0xFF00897B),
+      child: InkWell(
+        onTap: () => togglePaymentSelection(payment['kunjungan_id']),
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          children: [
+            // Header with radio selection
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF00897B).withOpacity(0.1) : null,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.local_hospital,
-                            size: 16,
-                            color: const Color(0xFF00897B),
+              ),
+              child: Row(
+                children: [
+                  // CHANGED: Use Radio instead of Checkbox for single selection
+                  Radio<int>(
+                    value: payment['kunjungan_id'],
+                    groupValue: selectedPayment,
+                    onChanged: (value) => togglePaymentSelection(payment['kunjungan_id']),
+                    activeColor: const Color(0xFF00897B),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.local_hospital,
+                              size: 16,
+                              color: const Color(0xFF00897B),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              payment['poli']['nama_poli'] ?? 'Umum',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF00897B),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Kunjungan ${formatDate(payment['tanggal_kunjungan'])}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black87,
                           ),
-                          const SizedBox(width: 4),
+                        ),
+                        Text(
+                          'No. Antrian: ${payment['no_antrian'] ?? '-'}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        // ADDED: Show transaction code if available
+                        if (payment['kode_transaksi'] != null) ...[
+                          const SizedBox(height: 2),
                           Text(
-                            payment['poli']['nama_poli'] ?? 'Umum',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF00897B),
+                            'Kode: ${payment['kode_transaksi']}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'monospace',
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 4),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
                       Text(
-                        'Kunjungan ${formatDate(payment['tanggal_kunjungan'])}',
+                        formatCurrency(payment['total_tagihan']),
                         style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black87,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF00897B),
                         ),
                       ),
-                      Text(
-                        'No. Antrian: ${payment['no_antrian'] ?? '-'}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          payment['status_pembayaran'] ?? 'Belum Bayar',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.orange.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      formatCurrency(payment['total_tagihan']),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF00897B),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        payment['status_pembayaran'] ?? 'Belum Bayar',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.orange.shade700,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          // Content
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Diagnosis: ${payment['diagnosis'] ?? 'Tidak ada'}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                
-                // Ringkasan layanan dan obat
-                Row(
-                  children: [
-                    if (payment['layanan'] != null && (payment['layanan'] as List).isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '${(payment['layanan'] as List).length} Layanan',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blue.shade700,
-                          ),
-                        ),
-                      ),
-                    
-                    if (payment['layanan'] != null && (payment['layanan'] as List).isNotEmpty &&
-                        payment['resep_obat'] != null && (payment['resep_obat'] as List).isNotEmpty)
-                      const SizedBox(width: 8),
-                    
-                    if (payment['resep_obat'] != null && (payment['resep_obat'] as List).isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '${(payment['resep_obat'] as List).length} Obat',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.green.shade700,
-                          ),
-                        ),
-                      ),
-                    
-                    const Spacer(),
-                    
-                    TextButton(
-                      onPressed: () => lihatDetail(payment['kunjungan_id']),
-                      child: const Text(
-                        'Lihat Detail',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF00897B),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Diagnosis: ${payment['diagnosis'] ?? 'Tidak ada'}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
-                  ],
-                ),
-              ],
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Summary of services and medications
+                  Row(
+                    children: [
+                      if (payment['layanan'] != null && (payment['layanan'] as List).isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${(payment['layanan'] as List).length} Layanan',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ),
+                      
+                      if (payment['layanan'] != null && (payment['layanan'] as List).isNotEmpty &&
+                          payment['resep_obat'] != null && (payment['resep_obat'] as List).isNotEmpty)
+                        const SizedBox(width: 8),
+                      
+                      if (payment['resep_obat'] != null && (payment['resep_obat'] as List).isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${(payment['resep_obat'] as List).length} Obat',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                        ),
+                      
+                      const Spacer(),
+                      
+                      TextButton(
+                        onPressed: () => lihatDetail(payment['kunjungan_id']),
+                        child: const Text(
+                          'Lihat Detail',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF00897B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -710,9 +663,9 @@ class _ListPembayaranState extends State<ListPembayaran> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${selectedPayments.length} item dipilih',
-                        style: const TextStyle(
+                      const Text(
+                        'Pembayaran dipilih:', // CHANGED: Updated text
+                        style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
                         ),
@@ -740,14 +693,14 @@ class _ListPembayaranState extends State<ListPembayaran> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.payment, size: 18),
-                        const SizedBox(width: 8),
+                        Icon(Icons.store, size: 18),
+                        SizedBox(width: 8),
                         Text(
-                          selectedPayments.length == 1 ? 'Bayar Sekarang' : 'Bayar Semua',
-                          style: const TextStyle(
+                          'Bayar di Kasir', // SIMPLIFIED: Only one option
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
