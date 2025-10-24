@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
 // Import halaman login - sesuaikan dengan path yang benar
 
 class EditProfilePage extends StatefulWidget {
@@ -23,6 +25,7 @@ class _EditProfilePageState extends State<EditProfilePage>
   final tanggalLahirController = TextEditingController();
   String? jenisKelamin;
   String? currentFotoUrl;
+  String? qrPayload;
   File? selectedImage;
   final ImagePicker _picker = ImagePicker();
 
@@ -64,12 +67,15 @@ class _EditProfilePageState extends State<EditProfilePage>
       vsync: this,
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
 
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, .1), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _slideController, curve: Curves.ease));
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, .1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.ease));
 
     _fadeController.forward();
     _slideController.forward();
@@ -109,6 +115,7 @@ class _EditProfilePageState extends State<EditProfilePage>
           tanggalLahirController.text = data['data']['tanggal_lahir'] ?? '';
           jenisKelamin = data['data']['jenis_kelamin'];
           currentFotoUrl = data['data']['foto_pasien'];
+          qrPayload = data['data']['qr_code_pasien'];
           isLoadingData = false;
         });
       } else {
@@ -132,11 +139,7 @@ class _EditProfilePageState extends State<EditProfilePage>
           ),
           title: Row(
             children: [
-              Icon(
-                Icons.logout,
-                color: Colors.red.shade600,
-                size: 28,
-              ),
+              Icon(Icons.logout, color: Colors.red.shade600, size: 28),
               const SizedBox(width: 12),
               const Text(
                 'Keluar Akun',
@@ -187,13 +190,12 @@ class _EditProfilePageState extends State<EditProfilePage>
   Future<void> _performLogout() async {
     // Show loading
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(color: kTealDark),
-      ),
+      builder: (context) =>
+          const Center(child: CircularProgressIndicator(color: kTealDark)),
     );
 
     try {
@@ -226,7 +228,9 @@ class _EditProfilePageState extends State<EditProfilePage>
             ),
             backgroundColor: const Color(0xFF4CAF50),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -234,7 +238,7 @@ class _EditProfilePageState extends State<EditProfilePage>
     } catch (e) {
       // Tutup loading dialog jika error
       if (mounted) Navigator.of(context).pop();
-      
+
       // Show error message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -248,7 +252,9 @@ class _EditProfilePageState extends State<EditProfilePage>
             ),
             backgroundColor: const Color(0xFFE53935),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -286,7 +292,10 @@ class _EditProfilePageState extends State<EditProfilePage>
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'Pilih Foto Profil',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -351,12 +360,14 @@ class _EditProfilePageState extends State<EditProfilePage>
     );
   }
 
-  ListTile _buildPickTile(BuildContext ctx,
-      {required IconData icon,
-      required String title,
-      Color? iconColor,
-      Color? tileColor,
-      required VoidCallback onTap}) {
+  ListTile _buildPickTile(
+    BuildContext ctx, {
+    required IconData icon,
+    required String title,
+    Color? iconColor,
+    Color? tileColor,
+    required VoidCallback onTap,
+  }) {
     return ListTile(
       leading: Container(
         padding: const EdgeInsets.all(10),
@@ -413,16 +424,15 @@ class _EditProfilePageState extends State<EditProfilePage>
 
       if (response.statusCode == 200 && data['success'] == true) {
         _showSuccessSnackBar('Profil berhasil diperbarui');
-        
+
         if (!mounted) return;
-        
+
         // Navigasi ke MainWrapper (halaman utama dengan bottom navigation) dan hapus semua route sebelumnya
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const MainWrapper()),
           (route) => false,
         );
-        
       } else {
         _showErrorSnackBar(data['message'] ?? 'Gagal update profil');
       }
@@ -530,14 +540,14 @@ class _EditProfilePageState extends State<EditProfilePage>
                   child: selectedImage != null
                       ? Image.file(selectedImage!, fit: BoxFit.cover)
                       : currentFotoUrl != null
-                          ? Image.network(
-                              'http://10.227.74.71:8000/storage/$currentFotoUrl',
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return _avatarPlaceholder();
-                              },
-                            )
-                          : _avatarPlaceholder(),
+                      ? Image.network(
+                          'http://10.227.74.71:8000/storage/$currentFotoUrl',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return _avatarPlaceholder();
+                          },
+                        )
+                      : _avatarPlaceholder(),
                 ),
               ),
             ),
@@ -562,7 +572,11 @@ class _EditProfilePageState extends State<EditProfilePage>
                     ),
                   ],
                 ),
-                child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.camera_alt,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
             ),
           ),
@@ -646,11 +660,18 @@ class _EditProfilePageState extends State<EditProfilePage>
               borderRadius: BorderRadius.circular(14),
               borderSide: const BorderSide(color: Colors.red, width: 1.4),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
+            ),
             suffixIcon: readOnly
                 ? const Padding(
                     padding: EdgeInsets.only(right: 8.0),
-                    child: Icon(Icons.calendar_today, color: kTealDark, size: 18),
+                    child: Icon(
+                      Icons.calendar_today,
+                      color: kTealDark,
+                      size: 18,
+                    ),
                   )
                 : null,
           ),
@@ -679,7 +700,9 @@ class _EditProfilePageState extends State<EditProfilePage>
                 decoration: BoxDecoration(
                   color: selected ? kTealDark : Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: selected ? kTealDark : Colors.grey.shade200),
+                  border: Border.all(
+                    color: selected ? kTealDark : Colors.grey.shade200,
+                  ),
                   boxShadow: selected
                       ? [
                           BoxShadow(
@@ -694,7 +717,10 @@ class _EditProfilePageState extends State<EditProfilePage>
                   borderRadius: BorderRadius.circular(14),
                   onTap: () => safeSetState(() => jenisKelamin = e),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -754,7 +780,10 @@ class _EditProfilePageState extends State<EditProfilePage>
               const SizedBox(width: 8),
               Text(
                 title,
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
               ),
             ],
           ),
@@ -781,10 +810,7 @@ class _EditProfilePageState extends State<EditProfilePage>
       actions: [
         // Tombol Logout di AppBar
         IconButton(
-          icon: Icon(
-            Icons.logout,
-            color: Colors.red.shade600,
-          ),
+          icon: Icon(Icons.logout, color: Colors.red.shade600),
           onPressed: _showLogoutDialog,
           tooltip: 'Keluar Akun',
         ),
@@ -815,7 +841,9 @@ class _EditProfilePageState extends State<EditProfilePage>
             style: ElevatedButton.styleFrom(
               backgroundColor: kTealDark,
               disabledBackgroundColor: kTealDark.withOpacity(.6),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
               elevation: 0,
             ),
             child: AnimatedSwitcher(
@@ -827,18 +855,29 @@ class _EditProfilePageState extends State<EditProfilePage>
                         SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
                         ),
                         SizedBox(width: 12),
                         Text(
                           'Menyimpan... ',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
                         ),
                       ],
                     )
                   : const Text(
                       'Simpan Perubahan',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
             ),
           ),
@@ -889,10 +928,13 @@ class _EditProfilePageState extends State<EditProfilePage>
                                       color: kTealDark.withOpacity(.10),
                                       blurRadius: 14,
                                       offset: const Offset(0, 6),
-                                    )
+                                    ),
                                   ],
                                 ),
-                                child: const Icon(Icons.verified_user, color: kTealDark),
+                                child: const Icon(
+                                  Icons.verified_user,
+                                  color: kTealDark,
+                                ),
                               ),
                               const SizedBox(width: 12),
                               const Expanded(
@@ -910,7 +952,10 @@ class _EditProfilePageState extends State<EditProfilePage>
                         Text(
                           'Tap foto untuk mengubah',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(height: 24),
 
@@ -923,7 +968,9 @@ class _EditProfilePageState extends State<EditProfilePage>
                                 label: 'Nama Lengkap',
                                 hint: 'Masukkan nama lengkap',
                                 icon: Icons.person_outline,
-                                validator: (v) => v!.isEmpty ? 'Nama tidak boleh kosong' : null,
+                                validator: (v) => v!.isEmpty
+                                    ? 'Nama tidak boleh kosong'
+                                    : null,
                               ),
                               const SizedBox(height: 16),
                               _buildTextField(
@@ -943,6 +990,91 @@ class _EditProfilePageState extends State<EditProfilePage>
                               ),
                               const SizedBox(height: 16),
                               _genderSelector(),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        _section(
+                          title: 'Kode QR Pasien',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if ((qrPayload ?? '').isNotEmpty)
+                                Column(
+                                  children: [
+                                    // QR code
+                                    Center(
+                                      child: QrImageView(
+                                        data:
+                                            qrPayload!, // contoh payload: "PAS-000123"
+                                        size: 180,
+                                        version: QrVersions.auto,
+                                        gapless: true,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    // Teks payload (biar petugas bisa ketik manual kalau perlu)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: kTeal.withOpacity(.06),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: SelectableText(
+                                        qrPayload!,
+                                        style: const TextStyle(
+                                          letterSpacing: 0.4,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Qr di atas adalah kode unik untuk identifikasi pasien Anda.\n',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12.5,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                    ),
+                                  ],
+                                )
+                              else
+                                Column(
+                                  children: [
+                                    const Icon(
+                                      Icons.qr_code_2,
+                                      size: 64,
+                                      color: kTealDark,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'QR belum tersedia di profil.',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Pastikan backend mengirim "qr_code_pasien" di endpoint profil\n'
+                                      'atau buka Riwayat Kunjungan untuk memuat QR otomatis.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12.5,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                             ],
                           ),
                         ),
@@ -980,7 +1112,10 @@ class _EditProfilePageState extends State<EditProfilePage>
                                   const SizedBox(width: 8),
                                   const Text(
                                     'Pengaturan Akun',
-                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1002,8 +1137,13 @@ class _EditProfilePageState extends State<EditProfilePage>
                                     ),
                                   ),
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                    side: BorderSide(color: Colors.red.shade600),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    side: BorderSide(
+                                      color: Colors.red.shade600,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),

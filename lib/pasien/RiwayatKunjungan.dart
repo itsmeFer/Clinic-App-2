@@ -2,19 +2,10 @@ import 'dart:convert';
 import 'package:RoyalClinic/pasien/PesanJadwal.dart';
 import 'package:RoyalClinic/pasien/dashboardScreen.dart';
 import 'package:RoyalClinic/pasien/edit_profile.dart';
+import 'package:RoyalClinic/pasien/DetailEmr.dart'; // Import halaman DetailEmr baru
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:typed_data';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:pdf/pdf.dart';
-import 'package:printing/printing.dart';
-import 'package:file_saver/file_saver.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 // UPDATED: Create a version without bottom navigation for use in MainWrapper
 class RiwayatKunjunganPage extends StatefulWidget {
@@ -35,350 +26,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
     super.initState();
     fetchRiwayatKunjungan();
   }
-
-  Future<Uint8List> _buildEmrPdf(Map<String, dynamic> kunjungan) async {
-    final emr = kunjungan['emr'] ?? {};
-    final dokter = kunjungan['dokter'] ?? {};
-    final pasien = pasienInfo ?? {};
-
-    final doc = pw.Document();
-
-    String rowText(String label, String? value) =>
-        '$label: ${value == null || value.isEmpty ? "-" : value}';
-
-    doc.addPage(
-      pw.MultiPage(
-        pageTheme: pw.PageTheme(
-          margin: const pw.EdgeInsets.all(24),
-          theme: pw.ThemeData.withFont(
-            base: await PdfGoogleFonts.nunitoRegular(),
-            bold: await PdfGoogleFonts.nunitoBold(),
-          ),
-        ),
-        build: (context) => [
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'Royal Clinic',
-                    style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(
-                    'Electronic Medical Record',
-                    style: const pw.TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-              pw.BarcodeWidget(
-                barcode: pw.Barcode.qrCode(),
-                data:
-                    'EMR-${kunjungan['id'] ?? ''}-${kunjungan['tanggal_kunjungan'] ?? ''}',
-                width: 60,
-                height: 60,
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 12),
-          pw.Divider(),
-
-          // Pasien
-          pw.Text(
-            'Data Pasien',
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(rowText('Nama', pasien['nama_pasien']?.toString())),
-          pw.Text(
-            rowText('Jenis Kelamin', pasien['jenis_kelamin']?.toString()),
-          ),
-          pw.Text(
-            rowText('Tanggal Lahir', pasien['tanggal_lahir']?.toString()),
-          ),
-          if ((pasien['alamat'] ?? '').toString().isNotEmpty)
-            pw.Text(rowText('Alamat', pasien['alamat'].toString())),
-          pw.SizedBox(height: 10),
-
-          // Kunjungan
-          pw.Text(
-            'Informasi Kunjungan',
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(
-            rowText(
-              'Tanggal',
-              (kunjungan['tanggal_kunjungan'] ?? '').toString(),
-            ),
-          ),
-          pw.Text(
-            rowText('No. Antrian', (kunjungan['no_antrian'] ?? '').toString()),
-          ),
-          pw.Text(
-            rowText(
-              'Keluhan Awal',
-              (kunjungan['keluhan_awal'] ?? '').toString(),
-            ),
-          ),
-          pw.SizedBox(height: 10),
-
-          // Dokter
-          pw.Text(
-            'Informasi Dokter',
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(rowText('Nama', dokter['nama_dokter']?.toString())),
-          pw.Text(rowText('Spesialisasi', dokter['spesialisasi']?.toString())),
-          pw.SizedBox(height: 10),
-
-          // EMR
-          pw.Text(
-            'EMR',
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 6),
-          if ((emr['keluhan_utama'] ?? '').toString().isNotEmpty)
-            pw.Text(rowText('Keluhan Utama', emr['keluhan_utama'].toString())),
-          if ((emr['diagnosis'] ?? '').toString().isNotEmpty)
-            pw.Text(rowText('Diagnosis', emr['diagnosis'].toString())),
-          if ((emr['riwayat_penyakit_sekarang'] ?? '').toString().isNotEmpty)
-            pw.Text(
-              rowText(
-                'Riwayat Penyakit Sekarang',
-                emr['riwayat_penyakit_sekarang'].toString(),
-              ),
-            ),
-          if ((emr['riwayat_penyakit_dahulu'] ?? '').toString().isNotEmpty)
-            pw.Text(
-              rowText(
-                'Riwayat Penyakit Dahulu',
-                emr['riwayat_penyakit_dahulu'].toString(),
-              ),
-            ),
-          if ((emr['riwayat_penyakit_keluarga'] ?? '').toString().isNotEmpty)
-            pw.Text(
-              rowText(
-                'Riwayat Penyakit Keluarga',
-                emr['riwayat_penyakit_keluarga'].toString(),
-              ),
-            ),
-
-          // Tanda vital
-          if (emr['tanda_vital'] != null) ...[
-            pw.SizedBox(height: 10),
-            pw.Text(
-              'Tanda Vital',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 6),
-            ...[
-                  'tekanan_darah',
-                  'suhu_tubuh',
-                  'nadi',
-                  'pernapasan',
-                  'saturasi_oksigen',
-                ]
-                .where((k) => emr['tanda_vital'][k] != null)
-                .map(
-                  (k) => pw.Text(
-                    rowText(
-                      k.replaceAll('_', ' ').toUpperCase(),
-                      emr['tanda_vital'][k].toString(),
-                    ),
-                  ),
-                ),
-          ],
-
-          // Resep
-          if ((kunjungan['resep_obat'] ?? []).isNotEmpty) ...[
-            pw.SizedBox(height: 10),
-            pw.Text(
-              'Resep Obat',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 6),
-            pw.Table.fromTextArray(
-              headers: ['Obat', 'Dosis', 'Jumlah', 'Subtotal'],
-              data: (kunjungan['resep_obat'] as List)
-                  .map(
-                    (r) => [
-                      (r['nama_obat'] ?? '-').toString(),
-                      (r['dosis'] ?? '-').toString(),
-                      (r['jumlah'] ?? '-').toString(),
-                      (r['subtotal'] ?? '-').toString(),
-                    ],
-                  )
-                  .toList(),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              cellAlignment: pw.Alignment.centerLeft,
-            ),
-          ],
-
-          // Pembayaran
-          if (kunjungan['pembayaran'] != null) ...[
-            pw.SizedBox(height: 10),
-            pw.Text(
-              'Ringkasan Pembayaran',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 6),
-            pw.Text(
-              rowText(
-                'Biaya Konsultasi',
-                (kunjungan['pembayaran']['biaya_konsultasi'] ?? '').toString(),
-              ),
-            ),
-            pw.Text(
-              rowText(
-                'Total Obat',
-                (kunjungan['pembayaran']['total_obat'] ?? '').toString(),
-              ),
-            ),
-            pw.Text(
-              rowText(
-                'Total Tagihan',
-                (kunjungan['pembayaran']['total_tagihan'] ?? '').toString(),
-              ),
-            ),
-            if ((kunjungan['pembayaran']['status'] ?? '').toString().isNotEmpty)
-              pw.Text(
-                rowText('Status', kunjungan['pembayaran']['status'].toString()),
-              ),
-          ],
-
-          pw.SizedBox(height: 16),
-          pw.Divider(),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Text('Dicetak pada ${DateTime.now()}'),
-          ),
-        ],
-      ),
-    );
-
-    return doc.save();
-  }
-
-  Future<File> _saveTempPdf(Uint8List bytes, String fileName) async {
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/$fileName');
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
-  }
-
-  Future<void> _saveWithPicker({
-    required Uint8List bytes,
-    required String fileName,
-    required MimeType mime,
-  }) async {
-    if (Platform.isAndroid) {
-      await Permission.storage.request(); // aman untuk Android < 10
-    }
-    await FileSaver.instance.saveFile(
-      name: fileName,
-      bytes: bytes,
-      mimeType: mime,
-    );
-  }
-
-  /// Render halaman pertama PDF jadi PNG (untuk opsi gambar)
-  Future<Uint8List> _buildEmrPng(
-    Map<String, dynamic> kunjungan, {
-    double dpi = 200,
-  }) async {
-    final pdfBytes = await _buildEmrPdf(kunjungan);
-    final raster = await Printing.raster(pdfBytes, pages: [0], dpi: dpi).first;
-    return await raster.toPng();
-  }
-
-  Future<void> _printEmr(Map<String, dynamic> kunjungan) async {
-    final bytes = await _buildEmrPdf(kunjungan);
-    await Printing.layoutPdf(onLayout: (_) async => bytes);
-  }
-
-  Future<void> _shareEmr(Map<String, dynamic> kunjungan) async {
-    final bytes = await _buildEmrPdf(kunjungan);
-    final fileName =
-        'EMR-${kunjungan['id'] ?? DateTime.now().millisecondsSinceEpoch}.pdf';
-    final file = await _saveTempPdf(bytes, fileName);
-    await Share.shareXFiles([
-      XFile(file.path, mimeType: 'application/pdf'),
-    ], text: 'EMR kunjungan Anda');
-  }
-
-  Future<void> _downloadEmrChooser(Map<String, dynamic> kunjungan) async {
-  if (!mounted) return;
-  showModalBottomSheet(
-    context: context,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (ctx) {
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text('Simpan EMR sebagai', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-
-            // PDF
-            ListTile(
-              leading: const Icon(Icons.picture_as_pdf),
-              title: const Text('PDF (direkomendasikan)'),
-              subtitle: const Text('Rapi untuk cetak & arsip'),
-              onTap: () async {
-                Navigator.pop(ctx);
-                try {
-                  final bytes = await _buildEmrPdf(kunjungan);
-                  final name = 'EMR-${kunjungan['id'] ?? DateTime.now().millisecondsSinceEpoch}.pdf';
-                  await _saveWithPicker(bytes: bytes, fileName: name, mime: MimeType.pdf);
-                  _showSuccessSnackBar('EMR disimpan sebagai PDF');
-                } catch (e) {
-                  _showErrorSnackBar('Gagal simpan PDF: $e');
-                }
-              },
-            ),
-
-            // PNG
-            ListTile(
-              leading: const Icon(Icons.image),
-              title: const Text('Gambar PNG'),
-              subtitle: const Text('Mudah dibagikan ke chat'),
-              onTap: () async {
-                Navigator.pop(ctx);
-                try {
-                  final png = await _buildEmrPng(kunjungan, dpi: 200);
-                  final name = 'EMR-${kunjungan['id'] ?? DateTime.now().millisecondsSinceEpoch}.png';
-                  await _saveWithPicker(bytes: png, fileName: name, mime: MimeType.png);
-                  _showSuccessSnackBar('EMR disimpan sebagai gambar');
-                } catch (e) {
-                  _showErrorSnackBar('Gagal simpan gambar: $e');
-                }
-              },
-            ),
-
-            const SizedBox(height: 8),
-          ],
-        ),
-      );
-    },
-  );
-}
-
 
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -660,7 +307,11 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
 
   String formatDate(String dateString) {
     try {
-      final date = DateTime.parse(dateString);
+      if (dateString.isEmpty) return '-';
+
+      // Parse sebagai UTC lalu convert ke local
+      final date = DateTime.parse(dateString).toLocal();
+
       final months = [
         '',
         'Jan',
@@ -841,38 +492,41 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
     );
   }
 
+  // UPDATED: Simplified dialog for basic information only
   void showKunjunganDetail(Map<String, dynamic> kunjungan) {
     final String statusEff = effectiveStatus(kunjungan);
+    final dokter = kunjungan['dokter'] ?? {};
 
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: MediaQuery.of(context).size.width * 0.95,
-          height: MediaQuery.of(context).size.height * 0.9,
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.9,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Header
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00897B),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
-                  ),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF00897B),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                 ),
                 child: Row(
                   children: [
                     const Icon(
-                      Icons.medical_information,
+                      Icons.info_outline,
                       color: Colors.white,
                       size: 24,
                     ),
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Detail Riwayat Kunjungan',
+                        'Ringkasan Kunjungan',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -888,14 +542,14 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                 ),
               ),
 
-              // Content
-              Expanded(
+              // Content - Simplified for basic info only
+              Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Status Badge (pakai statusEff)
+                      // Status Badge
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -933,101 +587,201 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                       const SizedBox(height: 16),
 
                       // Basic Information
-                      _buildSection('Informasi Kunjungan', Icons.info_outline, [
-                        DetailRow(
-                          icon: Icons.confirmation_number,
-                          label: 'No. Antrian',
-                          value: kunjungan['no_antrian'] ?? '-',
+                      _buildSimpleInfoCard('Informasi Kunjungan', [
+                        _buildSimpleRow(
+                          Icons.confirmation_number,
+                          'No. Antrian',
+                          kunjungan['no_antrian'] ?? '-',
                         ),
-                        DetailRow(
-                          icon: Icons.calendar_today,
-                          label: 'Tanggal',
-                          value: formatDate(
-                            kunjungan['tanggal_kunjungan'] ?? '',
-                          ),
+                        _buildSimpleRow(
+                          Icons.calendar_today,
+                          'Tanggal',
+                          formatDate(kunjungan['tanggal_kunjungan'] ?? ''),
                         ),
-                        DetailRow(
-                          icon: Icons.medical_services,
-                          label: 'Keluhan Awal',
-                          value: kunjungan['keluhan_awal'] ?? '-',
-                          isMultiline: true,
+                        _buildSimpleRow(
+                          Icons.medical_services,
+                          'Keluhan Awal',
+                          kunjungan['keluhan_awal'] ?? '-',
                         ),
                       ]),
 
+                      const SizedBox(height: 12),
+
                       // Doctor Information
-                      if (kunjungan['dokter'] != null) ...[
+                      _buildSimpleInfoCard('Informasi Dokter', [
+                        _buildSimpleRow(
+                          Icons.person,
+                          'Nama Dokter',
+                          dokter['nama_dokter'] ?? '-',
+                        ),
+                        _buildSimpleRow(
+                          Icons.local_hospital,
+                          'Spesialisasi',
+                          dokter['spesialisasi'] ?? 'Umum',
+                        ),
+                        if (dokter['no_hp'] != null)
+                          _buildSimpleRow(
+                            Icons.phone,
+                            'No. HP',
+                            dokter['no_hp'],
+                          ),
+                      ]),
+
+                      // EMR Summary and Action Button
+                      if (kunjungan['emr'] != null) ...[
                         const SizedBox(height: 16),
-                        _buildSection('Informasi Dokter', Icons.person, [
-                          DetailRow(
-                            icon: Icons.person,
-                            label: 'Nama Dokter',
-                            value: kunjungan['dokter']['nama_dokter'] ?? '-',
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF00897B).withOpacity(0.1),
+                                const Color(0xFF00897B).withOpacity(0.05),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFF00897B).withOpacity(0.3),
+                            ),
                           ),
-                          DetailRow(
-                            icon: Icons.local_hospital,
-                            label: 'Poli',
-                            value:
-                                kunjungan['dokter']['spesialisasi'] ?? 'Umum',
+                          child: Column(
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(
+                                    Icons.medical_information,
+                                    color: Color(0xFF00897B),
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'EMR Tersedia',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF00897B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Data rekam medis elektronik lengkap tersedia untuk kunjungan ini',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black54,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(
+                                      context,
+                                    ); // Close current dialog
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => DetailEmr(
+                                          kunjungan: kunjungan,
+                                          pasienInfo: pasienInfo,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.visibility, size: 18),
+                                  label: const Text('Lihat Detail EMR'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF00897B),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          DetailRow(
-                            icon: Icons.phone,
-                            label: 'No. HP',
-                            value: kunjungan['dokter']['no_hp'] ?? '-',
-                          ),
-                          DetailRow(
-                            icon: Icons.work_outline,
-                            label: 'Pengalaman',
-                            value: kunjungan['dokter']['pengalaman'] ?? '-',
-                          ),
-                        ]),
+                        ),
                       ],
 
-                      // EMR Information
-                      // === Aksi EMR: Cetak | Share | Download ===
-                      if (kunjungan['emr'] != null) ...[
+                      // Additional Info Badges
+                      if (kunjungan['resep_obat'] != null ||
+                          kunjungan['pembayaran'] != null) ...[
                         const SizedBox(height: 12),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => _printEmr(kunjungan),
-                                icon: const Icon(Icons.print),
-                                label: const Text('Cetak'),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
+                            if (kunjungan['resep_obat'] != null &&
+                                (kunjungan['resep_obat'] as List).isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.medication,
+                                      size: 14,
+                                      color: Colors.purple.shade700,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${(kunjungan['resep_obat'] as List).length} Resep Obat',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.purple.shade700,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => _shareEmr(kunjungan),
-                                icon: const Icon(Icons.share),
-                                label: const Text('Share'),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
+                            if (kunjungan['pembayaran'] != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.payment,
+                                      size: 14,
+                                      color: Colors.green.shade700,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      formatCurrency(
+                                        kunjungan['pembayaran']['total_tagihan'],
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () => _downloadEmrChooser(kunjungan),
-                                icon: const Icon(Icons.download),
-                                label: const Text('Download'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF00897B),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ],
@@ -1042,13 +796,20 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
     );
   }
 
-  Widget _buildSection(String title, IconData icon, List<Widget> children) {
+  Widget _buildSimpleInfoCard(String title, List<Widget> children) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1062,19 +823,13 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                 top: Radius.circular(12),
               ),
             ),
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: const Color(0xFF00897B)),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF00897B),
-                  ),
-                ),
-              ],
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF00897B),
+              ),
             ),
           ),
           Padding(
@@ -1086,324 +841,37 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
     );
   }
 
-  Widget _buildVitalSignsSection(Map<String, dynamic> vitalSigns) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
-      ),
-      child: Column(
+  Widget _buildSimpleRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.shade100,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
-              ),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.favorite, size: 18, color: Colors.red),
-                SizedBox(width: 8),
-                Text(
-                  'Tanda Vital',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
+          Icon(icon, size: 16, color: const Color(0xFF00897B)),
+          const SizedBox(width: 8),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (vitalSigns['tekanan_darah'] != null)
-                  DetailRow(
-                    icon: Icons.bloodtype,
-                    label: 'Tekanan Darah',
-                    value: '${vitalSigns['tekanan_darah']} mmHg',
-                  ),
-                if (vitalSigns['suhu_tubuh'] != null)
-                  DetailRow(
-                    icon: Icons.thermostat,
-                    label: 'Suhu Tubuh',
-                    value: '${vitalSigns['suhu_tubuh']}°C',
-                  ),
-                if (vitalSigns['nadi'] != null)
-                  DetailRow(
-                    icon: Icons.monitor_heart,
-                    label: 'Nadi',
-                    value: '${vitalSigns['nadi']} bpm',
-                  ),
-                if (vitalSigns['pernapasan'] != null)
-                  DetailRow(
-                    icon: Icons.air,
-                    label: 'Pernapasan',
-                    value: '${vitalSigns['pernapasan']} per menit',
-                  ),
-                if (vitalSigns['saturasi_oksigen'] != null)
-                  DetailRow(
-                    icon: Icons.water_drop,
-                    label: 'Saturasi Oksigen',
-                    value: '${vitalSigns['saturasi_oksigen']}%',
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrescriptionSection(List<dynamic> prescriptions) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade100,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
-              ),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.medication, size: 18, color: Colors.blue),
-                SizedBox(width: 8),
                 Text(
-                  'Resep Obat',
+                  label,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.blue,
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: prescriptions.map<Widget>((prescription) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              prescription['nama_obat'] ?? 'Obat tidak dikenal',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: prescription['status'] == 'Sudah Diambil'
-                                  ? Colors.green.shade100
-                                  : Colors.orange.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              prescription['status'] ?? 'Belum Diambil',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: prescription['status'] == 'Sudah Diambil'
-                                    ? Colors.green.shade700
-                                    : Colors.orange.shade700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      DetailRow(
-                        icon: Icons.medical_services,
-                        label: 'Dosis',
-                        value: prescription['dosis'] ?? '-',
-                        isCompact: true,
-                      ),
-                      DetailRow(
-                        icon: Icons.numbers,
-                        label: 'Jumlah',
-                        value: '${prescription['jumlah'] ?? 0}',
-                        isCompact: true,
-                      ),
-                      DetailRow(
-                        icon: Icons.attach_money,
-                        label: 'Harga per item',
-                        value: formatCurrency(prescription['harga_per_item']),
-                        isCompact: true,
-                      ),
-                      DetailRow(
-                        icon: Icons.receipt,
-                        label: 'Subtotal',
-                        value: formatCurrency(prescription['subtotal']),
-                        isCompact: true,
-                      ),
-                      if (prescription['keterangan'] != null &&
-                          prescription['keterangan'].isNotEmpty)
-                        DetailRow(
-                          icon: Icons.note,
-                          label: 'Keterangan',
-                          value: prescription['keterangan'],
-                          isCompact: true,
-                          isMultiline: true,
-                        ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentSection(Map<String, dynamic> payment) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green.shade100,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
-              ),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.payment, size: 18, color: Colors.green),
-                SizedBox(width: 8),
+                const SizedBox(height: 2),
                 Text(
-                  'Informasi Pembayaran',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green,
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
                   ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                DetailRow(
-                  icon: Icons.medical_services,
-                  label: 'Biaya Konsultasi',
-                  value: formatCurrency(payment['biaya_konsultasi']),
-                ),
-                DetailRow(
-                  icon: Icons.medication,
-                  label: 'Total Obat',
-                  value: formatCurrency(payment['total_obat']),
-                ),
-                const Divider(),
-                DetailRow(
-                  icon: Icons.receipt_long,
-                  label: 'Total Tagihan',
-                  value: formatCurrency(payment['total_tagihan']),
-                ),
-                if (payment['metode_pembayaran'] != null)
-                  DetailRow(
-                    icon: Icons.credit_card,
-                    label: 'Metode Pembayaran',
-                    value: payment['metode_pembayaran'],
-                  ),
-                if (payment['uang_yang_diterima'] != null)
-                  DetailRow(
-                    icon: Icons.payments,
-                    label: 'Uang Diterima',
-                    value: formatCurrency(payment['uang_yang_diterima']),
-                  ),
-                if (payment['kembalian'] != null)
-                  DetailRow(
-                    icon: Icons.change_circle,
-                    label: 'Kembalian',
-                    value: formatCurrency(payment['kembalian']),
-                  ),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: payment['status'] == 'Sudah Bayar'
-                        ? Colors.green.shade100
-                        : Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        payment['status'] == 'Sudah Bayar'
-                            ? Icons.check_circle
-                            : Icons.schedule,
-                        size: 16,
-                        color: payment['status'] == 'Sudah Bayar'
-                            ? Colors.green.shade700
-                            : Colors.orange.shade700,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        payment['status'] ?? 'Status tidak diketahui',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: payment['status'] == 'Sudah Bayar'
-                              ? Colors.green.shade700
-                              : Colors.orange.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -1538,7 +1006,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
             child: ListView(
               children: [
                 _buildPasienInfoCard(),
-
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -1547,15 +1014,12 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                   itemBuilder: (context, index) {
                     final kunjungan = riwayatList[index];
                     final dokter = kunjungan['dokter'];
-                    // 🔽 pakai status efektif
                     final status = effectiveStatus(kunjungan);
                     final hasEMR = kunjungan['emr'] != null;
                     final hasPrescription =
                         kunjungan['resep_obat'] != null &&
                         kunjungan['resep_obat'].isNotEmpty;
                     final payment = kunjungan['pembayaran'];
-
-                    // 🔽 canCancel berdasarkan status efektif
                     final canCancel = [
                       'pending',
                       'waiting',
@@ -1646,9 +1110,9 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                           const SizedBox(height: 2),
                                           Text(
                                             'Poli ${dokter['spesialisasi']}',
-                                            style: TextStyle(
+                                            style: const TextStyle(
                                               fontSize: 12,
-                                              color: const Color(0xFF00897B),
+                                              color: Color(0xFF00897B),
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -1656,7 +1120,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                       ],
                                     ),
                                   ),
-                                  // 🔽 badge status pakai status efektif
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 10,
@@ -1917,11 +1380,13 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                                 ),
                                               ),
                                               const SizedBox(width: 12),
-                                              const Text(
-                                                'Batalkan Kunjungan',
-                                                style: TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
+                                              const Expanded(
+                                                child: Text(
+                                                  'Batalkan Kunjungan',
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -2054,75 +1519,7 @@ class RiwayatKunjungan extends StatelessWidget {
         foregroundColor: Colors.black87,
         elevation: 0,
       ),
-      body: const RiwayatKunjunganPage(), // Using the page without bottom nav
-    );
-  }
-
-  Widget _buildBottomNavBar(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.9),
-            border: Border.all(color: Colors.white.withOpacity(0.6)),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00695C).withOpacity(0.08),
-                blurRadius: 18,
-                spreadRadius: 1,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: BottomNavigationBar(
-            type: BottomNavigationBarType.fixed,
-            currentIndex: 2, // Index 2 untuk tab Riwayat
-            onTap: (index) {
-              if (index != 2) {
-                // Jika bukan tab riwayat saat ini
-                // Navigasi ke MainWrapper dengan tab yang sesuai
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        MainWrapperWithIndex(initialIndex: index),
-                  ),
-                );
-              }
-            },
-            backgroundColor: Colors.transparent,
-            selectedItemColor: const Color(0xFF00897B),
-            unselectedItemColor: Colors.teal.shade200,
-            selectedFontSize: 12,
-            unselectedFontSize: 11,
-            elevation: 0,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home_outlined),
-                activeIcon: Icon(Icons.home),
-                label: 'Beranda',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.calendar_today_outlined),
-                activeIcon: Icon(Icons.calendar_today),
-                label: 'Jadwal',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.receipt_long),
-                activeIcon: Icon(Icons.receipt_long),
-                label: 'Riwayat',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.person_outline),
-                activeIcon: Icon(Icons.person),
-                label: 'Profil',
-              ),
-            ],
-          ),
-        ),
-      ),
+      body: const RiwayatKunjunganPage(),
     );
   }
 }
@@ -2140,13 +1537,6 @@ class _MainWrapperWithIndexState extends State<MainWrapperWithIndex> {
   late int _selectedIndex;
   late PageController _pageController;
   List<dynamic> jadwalDokter = [];
-
-  final _titles = const [
-    'Beranda',
-    'Jadwal Dokter',
-    'Riwayat Kunjungan',
-    'Profil Saya',
-  ];
 
   @override
   void initState() {
@@ -2195,17 +1585,13 @@ class _MainWrapperWithIndexState extends State<MainWrapperWithIndex> {
         controller: _pageController,
         onPageChanged: (index) => setState(() => _selectedIndex = index),
         children: [
-          // Beranda
           DashboardPage(
             jadwalDokter: jadwalDokter,
             onRefresh: fetchJadwalDokter,
             onLogout: () {},
           ),
-          // Jadwal
           PesanJadwal(allJadwal: jadwalDokter),
-          // Riwayat - UPDATED: Use RiwayatKunjunganPage instead of RiwayatKunjungan
           const RiwayatKunjunganPage(),
-          // Profil
           const EditProfilePage(),
         ],
       ),
@@ -2269,63 +1655,5 @@ class _MainWrapperWithIndexState extends State<MainWrapperWithIndex> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
-  }
-}
-
-class DetailRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool isMultiline;
-  final bool isCompact;
-
-  const DetailRow({
-    Key? key,
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.isMultiline = false,
-    this.isCompact = false,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: isCompact ? 2 : 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: isCompact ? 16 : 18, color: const Color(0xFF00897B)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: isCompact ? 11 : 12,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: isCompact ? 12 : 13,
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w500,
-                    height: isMultiline ? 1.4 : 1.2,
-                  ),
-                  maxLines: isMultiline ? null : 1,
-                  overflow: isMultiline ? null : TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

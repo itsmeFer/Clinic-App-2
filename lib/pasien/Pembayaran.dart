@@ -10,12 +10,8 @@ import 'package:qr_flutter/qr_flutter.dart'; // Tambahkan dependency ini
 class Pembayaran extends StatefulWidget {
   final int? kunjunganId;
   final bool fromList;
-  
-  const Pembayaran({
-    super.key,
-    this.kunjunganId,
-    this.fromList = false,
-  });
+
+  const Pembayaran({super.key, this.kunjunganId, this.fromList = false});
 
   @override
   State<Pembayaran> createState() => _PembayaranState();
@@ -25,7 +21,7 @@ class _PembayaranState extends State<Pembayaran> {
   bool isLoading = true;
   String? errorMessage;
   Map<String, dynamic>? pembayaranData;
-  
+
   // TAMBAHKAN untuk metode pembayaran dari database
   List<Map<String, dynamic>> metodePembayaran = [];
   bool isLoadingMetode = false;
@@ -61,7 +57,7 @@ class _PembayaranState extends State<Pembayaran> {
   Future<void> fetchMetodePembayaran() async {
     try {
       setState(() => isLoadingMetode = true);
-      
+
       final token = await getToken();
       if (token == null) {
         _setDefaultMetodePembayaran();
@@ -69,7 +65,9 @@ class _PembayaranState extends State<Pembayaran> {
       }
 
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/pembayaran/get-data-metode-pembayaran'),
+        Uri.parse(
+          'http://10.227.74.71:8000/api/pembayaran/get-data-metode-pembayaran',
+        ),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -89,7 +87,9 @@ class _PembayaranState extends State<Pembayaran> {
             metodePembayaran = List<Map<String, dynamic>>.from(data['data']);
             isLoadingMetode = false;
           });
-          print('✅ Loaded ${metodePembayaran.length} metode pembayaran from database');
+          print(
+            '✅ Loaded ${metodePembayaran.length} metode pembayaran from database',
+          );
         } else {
           _setDefaultMetodePembayaran();
         }
@@ -118,7 +118,7 @@ class _PembayaranState extends State<Pembayaran> {
   Future<void> fetchPembayaranData() async {
     try {
       final token = await getToken();
-      
+
       if (token == null) {
         setState(() {
           errorMessage = 'Token tidak ditemukan';
@@ -133,14 +133,18 @@ class _PembayaranState extends State<Pembayaran> {
       final fromListPayment = prefs.getBool('from_list_payment') ?? false;
 
       String url;
-      
+
       if (selectedKunjunganId != null && fromListPayment) {
         // Dari ListPembayaran - ambil detail specific kunjungan
-        url = 'http://10.227.74.71:8000/api/pembayaran/detail/$selectedKunjunganId';
-        print('🔍 Using specific kunjungan_id from SharedPreferences: $selectedKunjunganId');
+        url =
+            'http://10.227.74.71:8000/api/pembayaran/detail/$selectedKunjunganId';
+        print(
+          '🔍 Using specific kunjungan_id from SharedPreferences: $selectedKunjunganId',
+        );
       } else if (widget.kunjunganId != null) {
         // Dari parameter constructor (fallback)
-        url = 'http://10.227.74.71:8000/api/pembayaran/detail/${widget.kunjunganId}';
+        url =
+            'http://10.227.74.71:8000/api/pembayaran/detail/${widget.kunjunganId}';
         print('🔍 Using kunjunganId from constructor: ${widget.kunjunganId}');
       } else {
         // Original behavior - ambil dari pasien_id
@@ -173,7 +177,8 @@ class _PembayaranState extends State<Pembayaran> {
 
       if (response.body.startsWith('<') || response.body.contains('<script>')) {
         setState(() {
-          errorMessage = 'Server mengembalikan HTML alih-alih JSON. Cek Laravel log untuk error details.';
+          errorMessage =
+              'Server mengembalikan HTML alih-alih JSON. Cek Laravel log untuk error details.';
           isLoading = false;
         });
         return;
@@ -200,11 +205,15 @@ class _PembayaranState extends State<Pembayaran> {
             }
             isLoading = false;
           });
-          
+
           // Debug print kode transaksi dan metode pembayaran
           print('🔍 Kode Transaksi: ${pembayaranData?['kode_transaksi']}');
-          print('🔍 Metode Pembayaran: ${pembayaranData?['metode_pembayaran']}');
-          print('🔍 Metode Pembayaran Nama: ${pembayaranData?['metode_pembayaran_nama']}');
+          print(
+            '🔍 Metode Pembayaran: ${pembayaranData?['metode_pembayaran']}',
+          );
+          print(
+            '🔍 Metode Pembayaran Nama: ${pembayaranData?['metode_pembayaran_nama']}',
+          );
         } else {
           setState(() {
             errorMessage = data['message'] ?? 'Gagal memuat data pembayaran';
@@ -214,7 +223,10 @@ class _PembayaranState extends State<Pembayaran> {
       } else if (response.statusCode == 400) {
         // HANDLE: Status 400 could mean payment is already completed
         final data = jsonDecode(response.body);
-        if (data['message']?.toString().toLowerCase().contains('sudah selesai') == true) {
+        if (data['message']?.toString().toLowerCase().contains(
+              'sudah selesai',
+            ) ==
+            true) {
           // Payment is completed, create mock data for display
           setState(() {
             pembayaranData = {
@@ -233,7 +245,7 @@ class _PembayaranState extends State<Pembayaran> {
             };
             isLoading = false;
           });
-          
+
           // Auto show success dialog since payment is completed
           Future.delayed(Duration(milliseconds: 500), () {
             if (mounted) {
@@ -249,12 +261,14 @@ class _PembayaranState extends State<Pembayaran> {
       } else if (response.statusCode == 404) {
         final data = jsonDecode(response.body);
         setState(() {
-          errorMessage = data['message'] ?? 'Tidak ada pembayaran yang menunggu';
+          errorMessage =
+              data['message'] ?? 'Tidak ada pembayaran yang menunggu';
           isLoading = false;
         });
       } else {
         setState(() {
-          errorMessage = 'Gagal memuat data pembayaran (Status: ${response.statusCode})';
+          errorMessage =
+              'Gagal memuat data pembayaran (Status: ${response.statusCode})';
           isLoading = false;
         });
       }
@@ -263,7 +277,8 @@ class _PembayaranState extends State<Pembayaran> {
       if (mounted) {
         setState(() {
           if (e.toString().contains('FormatException')) {
-            errorMessage = 'Server mengembalikan format tidak valid. Silakan hubungi admin.';
+            errorMessage =
+                'Server mengembalikan format tidak valid. Silakan hubungi admin.';
           } else {
             errorMessage = 'Kesalahan koneksi: $e';
           }
@@ -277,20 +292,23 @@ class _PembayaranState extends State<Pembayaran> {
   Future<void> cekStatusPembayaran() async {
     try {
       setState(() => isLoading = true);
-      
+
       // Refresh payment data to get latest status
       await fetchPembayaranData();
-      
+
       if (!mounted) return;
-      
+
       setState(() => isLoading = false);
-      
+
       // Check if payment is now completed
-      if (pembayaranData != null && pembayaranData!['status_pembayaran'] == 'Sudah Bayar') {
+      if (pembayaranData != null &&
+          pembayaranData!['status_pembayaran'] == 'Sudah Bayar') {
         _showPaymentSuccessDialog();
       } else {
         // Still not paid, show info message
-        _showErrorSnackBar('Pembayaran belum selesai. Silakan cek kembali setelah melakukan pembayaran di kasir.');
+        _showErrorSnackBar(
+          'Pembayaran belum selesai. Silakan cek kembali setelah melakukan pembayaran di kasir.',
+        );
       }
     } catch (e) {
       print('Error cek status pembayaran: $e');
@@ -326,7 +344,7 @@ class _PembayaranState extends State<Pembayaran> {
                 ),
               ),
               SizedBox(height: 24),
-              
+
               // Success title
               Text(
                 'Pembayaran Berhasil!',
@@ -337,9 +355,9 @@ class _PembayaranState extends State<Pembayaran> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              
+
               SizedBox(height: 12),
-              
+
               // Success message
               Text(
                 'Terima kasih! Pembayaran Anda telah berhasil diproses.',
@@ -350,9 +368,9 @@ class _PembayaranState extends State<Pembayaran> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              
+
               SizedBox(height: 8),
-              
+
               // Additional info
               Container(
                 padding: EdgeInsets.all(12),
@@ -362,7 +380,11 @@ class _PembayaranState extends State<Pembayaran> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue.shade600, size: 20),
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.blue.shade600,
+                      size: 20,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -376,19 +398,21 @@ class _PembayaranState extends State<Pembayaran> {
                   ],
                 ),
               ),
-              
+
               SizedBox(height: 24),
-              
+
               // OK button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).pop(); // Close dialog
-                    
+
                     // Navigate to MainWrapper (dashboard) - replace all routes
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => const MainWrapper()),
+                      MaterialPageRoute(
+                        builder: (context) => const MainWrapper(),
+                      ),
                       (route) => false,
                     );
                   },
@@ -403,10 +427,7 @@ class _PembayaranState extends State<Pembayaran> {
                   ),
                   child: Text(
                     'Kembali ke Dashboard',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -420,7 +441,7 @@ class _PembayaranState extends State<Pembayaran> {
   // NEW: Show QR Code dialog
   void _showQRCodeDialog() {
     final kodeTransaksi = pembayaranData?['kode_transaksi'];
-    
+
     if (kodeTransaksi == null) {
       _showErrorSnackBar('Kode transaksi tidak tersedia');
       return;
@@ -462,7 +483,7 @@ class _PembayaranState extends State<Pembayaran> {
                 ],
               ),
               SizedBox(height: 20),
-              
+
               // QR Code
               Container(
                 padding: EdgeInsets.all(16),
@@ -480,9 +501,9 @@ class _PembayaranState extends State<Pembayaran> {
                   errorCorrectionLevel: QrErrorCorrectLevel.M,
                 ),
               ),
-              
+
               SizedBox(height: 16),
-              
+
               // Kode Transaksi Text
               Container(
                 padding: EdgeInsets.all(12),
@@ -514,9 +535,9 @@ class _PembayaranState extends State<Pembayaran> {
                   ],
                 ),
               ),
-              
+
               SizedBox(height: 16),
-              
+
               // Copy button
               SizedBox(
                 width: double.infinity,
@@ -543,15 +564,12 @@ class _PembayaranState extends State<Pembayaran> {
                   ),
                 ),
               ),
-              
+
               SizedBox(height: 12),
-              
+
               Text(
                 'Tunjukkan QR code ini kepada petugas kasir atau salin kode transaksi untuk pembayaran',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -564,7 +582,7 @@ class _PembayaranState extends State<Pembayaran> {
   // UPDATED: Show payment at cashier dialog dengan kode transaksi dan metode pembayaran dari database
   void _showPaymentAtCashierDialog() {
     setState(() => isLoading = false);
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -586,7 +604,7 @@ class _PembayaranState extends State<Pembayaran> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             SizedBox(height: 16),
-            
+
             // TAMPILKAN KODE TRANSAKSI JIKA ADA
             if (pembayaranData?['kode_transaksi'] != null) ...[
               Container(
@@ -601,7 +619,11 @@ class _PembayaranState extends State<Pembayaran> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.receipt_long, color: Colors.orange.shade700, size: 16),
+                        Icon(
+                          Icons.receipt_long,
+                          color: Colors.orange.shade700,
+                          size: 16,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           'Kode Transaksi:',
@@ -618,12 +640,16 @@ class _PembayaranState extends State<Pembayaran> {
                             Navigator.pop(context);
                             _showQRCodeDialog();
                           },
-                          icon: Icon(Icons.qr_code, 
-                            color: Colors.orange.shade700, 
-                            size: 20
+                          icon: Icon(
+                            Icons.qr_code,
+                            color: Colors.orange.shade700,
+                            size: 20,
                           ),
                           padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(minWidth: 24, minHeight: 24),
+                          constraints: BoxConstraints(
+                            minWidth: 24,
+                            minHeight: 24,
+                          ),
                           tooltip: 'Tampilkan QR Code',
                         ),
                       ],
@@ -652,7 +678,7 @@ class _PembayaranState extends State<Pembayaran> {
               ),
               SizedBox(height: 16),
             ],
-            
+
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -679,7 +705,7 @@ class _PembayaranState extends State<Pembayaran> {
               ),
             ),
             SizedBox(height: 16),
-            
+
             // TAMPILKAN METODE PEMBAYARAN DARI DATABASE
             Container(
               padding: EdgeInsets.all(12),
@@ -693,7 +719,11 @@ class _PembayaranState extends State<Pembayaran> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.payment, color: Colors.green.shade700, size: 16),
+                      Icon(
+                        Icons.payment,
+                        color: Colors.green.shade700,
+                        size: 16,
+                      ),
                       SizedBox(width: 8),
                       Text(
                         'Metode Pembayaran Tersedia:',
@@ -706,7 +736,7 @@ class _PembayaranState extends State<Pembayaran> {
                     ],
                   ),
                   SizedBox(height: 8),
-                  
+
                   // DYNAMIC PAYMENT METHODS dari database
                   if (isLoadingMetode)
                     Center(
@@ -759,7 +789,7 @@ class _PembayaranState extends State<Pembayaran> {
             ),
             SizedBox(height: 16),
             Text(
-              pembayaranData?['kode_transaksi'] != null 
+              pembayaranData?['kode_transaksi'] != null
                   ? 'Tunjukkan kode transaksi ini kepada petugas kasir. Anda dapat memilih metode pembayaran yang diinginkan di kasir.'
                   : 'Silakan menuju kasir untuk menyelesaikan pembayaran. Anda dapat memilih metode pembayaran yang diinginkan di kasir.',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
@@ -780,9 +810,7 @@ class _PembayaranState extends State<Pembayaran> {
                 _showQRCodeDialog();
               },
               child: Text('QR Code'),
-              style: TextButton.styleFrom(
-                foregroundColor: Color(0xFF00897B),
-              ),
+              style: TextButton.styleFrom(foregroundColor: Color(0xFF00897B)),
             ),
           ElevatedButton(
             onPressed: () {
@@ -824,20 +852,14 @@ class _PembayaranState extends State<Pembayaran> {
             const SizedBox(height: 24),
             const Text(
               'Siap untuk Pembayaran!',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
               pembayaranData?['kode_transaksi'] != null
                   ? 'Silakan menuju kasir untuk menyelesaikan pembayaran dengan kode transaksi yang telah diberikan.\nSetelah pembayaran selesai, Anda dapat mengambil obat di apoteker.'
                   : 'Silakan menuju kasir untuk menyelesaikan pembayaran.\nSetelah pembayaran selesai, Anda dapat mengambil obat di apoteker.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 28),
@@ -904,13 +926,10 @@ class _PembayaranState extends State<Pembayaran> {
     } else {
       value = 0.0;
     }
-    
-    return 'Rp ${value.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), 
-      (Match m) => '${m[1]}.'
-    )}';
+
+    return 'Rp ${value.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}';
   }
-  
+
   double toDoubleValue(dynamic value) {
     if (value == null) return 0.0;
     if (value is String) {
@@ -927,8 +946,19 @@ class _PembayaranState extends State<Pembayaran> {
     try {
       final date = DateTime.parse(dateString);
       final months = [
-        '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-        'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
+        '',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'Mei',
+        'Jun',
+        'Jul',
+        'Ags',
+        'Sep',
+        'Okt',
+        'Nov',
+        'Des',
       ];
       return '${date.day} ${months[date.month]} ${date.year}';
     } catch (e) {
@@ -975,15 +1005,13 @@ class _PembayaranState extends State<Pembayaran> {
           // Main content
           isLoading
               ? const Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFF00897B),
-                  ),
+                  child: CircularProgressIndicator(color: Color(0xFF00897B)),
                 )
               : errorMessage != null
-                  ? _buildErrorState()
-                  : pembayaranData == null
-                      ? _buildNoDataState()
-                      : _buildContent(),
+              ? _buildErrorState()
+              : pembayaranData == null
+              ? _buildNoDataState()
+              : _buildContent(),
         ],
       ),
     );
@@ -1069,18 +1097,11 @@ class _PembayaranState extends State<Pembayaran> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.receipt_long,
-            size: 64,
-            color: Colors.grey.shade400,
-          ),
+          Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade400),
           const SizedBox(height: 16),
           const Text(
             'Tidak ada pembayaran',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -1110,7 +1131,7 @@ class _PembayaranState extends State<Pembayaran> {
             ),
           ),
         ),
-        
+
         if (pembayaranData!['status_pembayaran'] == 'Sudah Bayar')
           _buildAlreadyPaidInfo()
         else
@@ -1122,21 +1143,25 @@ class _PembayaranState extends State<Pembayaran> {
   Widget _buildStatusCard() {
     final status = pembayaranData!['status_pembayaran'] ?? 'Belum Bayar';
     final isPaymentComplete = status == 'Sudah Bayar';
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isPaymentComplete ? Colors.green.shade50 : Colors.orange.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isPaymentComplete ? Colors.green.shade200 : Colors.orange.shade200,
+          color: isPaymentComplete
+              ? Colors.green.shade200
+              : Colors.orange.shade200,
         ),
       ),
       child: Row(
         children: [
           Icon(
             isPaymentComplete ? Icons.check_circle : Icons.schedule,
-            color: isPaymentComplete ? Colors.green.shade600 : Colors.orange.shade600,
+            color: isPaymentComplete
+                ? Colors.green.shade600
+                : Colors.orange.shade600,
             size: 24,
           ),
           const SizedBox(width: 12),
@@ -1145,22 +1170,23 @@ class _PembayaranState extends State<Pembayaran> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isPaymentComplete ? 'Pembayaran Selesai' : 'Menunggu Pembayaran',
+                  isPaymentComplete
+                      ? 'Pembayaran Selesai'
+                      : 'Menunggu Pembayaran',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: isPaymentComplete ? Colors.green.shade700 : Colors.orange.shade700,
+                    color: isPaymentComplete
+                        ? Colors.green.shade700
+                        : Colors.orange.shade700,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isPaymentComplete 
+                  isPaymentComplete
                       ? 'Silakan ambil obat di apoteker klinik'
                       : 'Silakan lakukan pembayaran di kasir terlebih dahulu',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ],
             ),
@@ -1175,7 +1201,7 @@ class _PembayaranState extends State<Pembayaran> {
     final pasien = pembayaranData!['pasien'];
     final poli = pembayaranData!['poli'];
     final tanggalKunjungan = pembayaranData!['tanggal_kunjungan'];
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1209,10 +1235,7 @@ class _PembayaranState extends State<Pembayaran> {
               const SizedBox(width: 12),
               const Text(
                 'Informasi Kunjungan',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -1222,7 +1245,7 @@ class _PembayaranState extends State<Pembayaran> {
           _buildInfoRow('Tanggal', formatDate(tanggalKunjungan ?? '')),
           _buildInfoRow('No. Antrian', pembayaranData!['no_antrian'] ?? '-'),
           _buildInfoRow('Diagnosis', pembayaranData!['diagnosis'] ?? '-'),
-          
+
           // TAMBAHKAN KODE TRANSAKSI DI SINI dengan QR button
           if (pembayaranData!['kode_transaksi'] != null) ...[
             const SizedBox(height: 8),
@@ -1235,11 +1258,7 @@ class _PembayaranState extends State<Pembayaran> {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.qr_code,
-                    color: Colors.orange.shade700,
-                    size: 16,
-                  ),
+                  Icon(Icons.qr_code, color: Colors.orange.shade700, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -1268,9 +1287,10 @@ class _PembayaranState extends State<Pembayaran> {
                   // NEW: QR Code mini button
                   IconButton(
                     onPressed: _showQRCodeDialog,
-                    icon: Icon(Icons.fullscreen, 
-                      color: Colors.orange.shade700, 
-                      size: 16
+                    icon: Icon(
+                      Icons.fullscreen,
+                      color: Colors.orange.shade700,
+                      size: 16,
                     ),
                     padding: EdgeInsets.zero,
                     constraints: BoxConstraints(minWidth: 32, minHeight: 32),
@@ -1280,13 +1300,13 @@ class _PembayaranState extends State<Pembayaran> {
               ),
             ),
           ],
-          
+
           // TAMPILKAN METODE PEMBAYARAN JIKA ADA
-          if (pembayaranData!['metode_pembayaran_nama'] != null || pembayaranData!['metode_pembayaran'] != null)
-            _buildInfoRow(
-              'Metode Pembayaran',
-              pembayaranData!['metode_pembayaran_nama'] ?? pembayaranData!['metode_pembayaran'] ?? 'Cash'
-            ),
+          _buildInfoRow(
+            'Metode Pembayaran',
+            pembayaranData!['metode_pembayaran_nama'] ??
+                'Konfirmasi di Kasir',
+          ),
         ],
       ),
     );
@@ -1294,7 +1314,7 @@ class _PembayaranState extends State<Pembayaran> {
 
   Widget _buildMedicalServices() {
     final layananList = pembayaranData!['layanan'] as List<dynamic>? ?? [];
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1328,33 +1348,28 @@ class _PembayaranState extends State<Pembayaran> {
               const SizedBox(width: 12),
               const Text(
                 'Layanan Medis',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          
+
           if (layananList.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 'Tidak ada layanan',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
             )
           else
             ...layananList.map((layanan) {
-              final namaLayanan = layanan['nama_layanan']?.toString() ?? 'Layanan';
+              final namaLayanan =
+                  layanan['nama_layanan']?.toString() ?? 'Layanan';
               final hargaLayanan = toDoubleValue(layanan['harga_layanan']);
               final jumlah = layanan['jumlah'] ?? 1;
               final subtotal = toDoubleValue(layanan['subtotal']);
-              
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -1399,7 +1414,7 @@ class _PembayaranState extends State<Pembayaran> {
 
   Widget _buildMedicationsList() {
     final resepObat = pembayaranData!['resep_obat'] as List<dynamic>? ?? [];
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1434,10 +1449,7 @@ class _PembayaranState extends State<Pembayaran> {
               const Expanded(
                 child: Text(
                   'Obat-obatan',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -1449,10 +1461,7 @@ class _PembayaranState extends State<Pembayaran> {
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   'Tidak ada resep obat',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                 ),
               ),
             )
@@ -1468,11 +1477,11 @@ class _PembayaranState extends State<Pembayaran> {
   Widget _buildMedicationItem(Map<String, dynamic> obat) {
     final isReady = obat['status'] == 'Sudah Diambil';
     final obatData = obat['obat'] ?? {};
-    
+
     final hargaObat = toDoubleValue(obatData['harga_obat']);
     final jumlah = toDoubleValue(obat['jumlah']);
     final hargaTotal = hargaObat * jumlah;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -1511,16 +1520,15 @@ class _PembayaranState extends State<Pembayaran> {
                 ),
                 Text(
                   '${jumlah.toInt()}x - ${obat['keterangan']?.toString() ?? 'Sesuai anjuran dokter'}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
                 Text(
                   isReady ? 'Sudah diambil' : 'Belum diambil',
                   style: TextStyle(
                     fontSize: 10,
-                    color: isReady ? Colors.green.shade600 : Colors.orange.shade600,
+                    color: isReady
+                        ? Colors.green.shade600
+                        : Colors.orange.shade600,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1544,7 +1552,7 @@ class _PembayaranState extends State<Pembayaran> {
     final totalTagihan = toDoubleValue(pembayaranData!['total_tagihan']);
     final totalLayanan = toDoubleValue(pembayaranData!['total_layanan'] ?? 0);
     final totalObat = toDoubleValue(pembayaranData!['total_obat'] ?? 0);
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1578,26 +1586,23 @@ class _PembayaranState extends State<Pembayaran> {
               const SizedBox(width: 12),
               const Text(
                 'Rincian Pembayaran',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          
+
           if (totalLayanan > 0)
             _buildSummaryRow('Total Layanan', formatCurrency(totalLayanan)),
-          
+
           if (totalObat > 0)
             _buildSummaryRow('Total Obat', formatCurrency(totalObat)),
-          
+
           const Divider(height: 24),
-          
+
           _buildSummaryRow(
-            'Total Pembayaran', 
-            formatCurrency(totalTagihan), 
+            'Total Pembayaran',
+            formatCurrency(totalTagihan),
             isTotal: true,
           ),
         ],
@@ -1607,7 +1612,7 @@ class _PembayaranState extends State<Pembayaran> {
 
   Widget _buildBottomPaymentButton() {
     final totalTagihan = toDoubleValue(pembayaranData!['total_tagihan']);
-    
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1630,10 +1635,7 @@ class _PembayaranState extends State<Pembayaran> {
                 children: [
                   const Text(
                     'Total Pembayaran:',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   Text(
                     formatCurrency(totalTagihan),
@@ -1646,7 +1648,7 @@ class _PembayaranState extends State<Pembayaran> {
                 ],
               ),
               const SizedBox(height: 16),
-              
+
               // NEW: Two buttons side by side
               Row(
                 children: [
@@ -1679,9 +1681,9 @@ class _PembayaranState extends State<Pembayaran> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(width: 12),
-                  
+
                   // Cek Status Pembayaran button
                   Expanded(
                     flex: 2,
@@ -1729,11 +1731,7 @@ class _PembayaranState extends State<Pembayaran> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(
-                Icons.check_circle,
-                color: Colors.green.shade600,
-                size: 20,
-              ),
+              Icon(Icons.check_circle, color: Colors.green.shade600, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -1762,23 +1760,14 @@ class _PembayaranState extends State<Pembayaran> {
             width: 80,
             child: Text(
               label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ),
-          const Text(
-            ': ',
-            style: TextStyle(fontSize: 12),
-          ),
+          const Text(': ', style: TextStyle(fontSize: 12)),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ),
         ],
