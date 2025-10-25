@@ -10,12 +10,14 @@ import 'package:timezone/timezone.dart' as tz;
 
 class LocalNotificationService {
   // ===== Singleton =====
-  static final LocalNotificationService _instance = LocalNotificationService._internal();
+  static final LocalNotificationService _instance =
+      LocalNotificationService._internal();
   factory LocalNotificationService() => _instance;
   LocalNotificationService._internal();
 
   // ===== Fields =====
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
 
   Timer? _pollingTimer;
   Function(Map<String, dynamic>)? onNotificationTapped;
@@ -34,7 +36,8 @@ class LocalNotificationService {
   final StreamController<List<NotificationModel>> _notificationController =
       StreamController<List<NotificationModel>>.broadcast();
 
-  Stream<List<NotificationModel>> get notificationStream => _notificationController.stream;
+  Stream<List<NotificationModel>> get notificationStream =>
+      _notificationController.stream;
 
   // ===== Public API =====
   Future<void> initialize() async {
@@ -62,12 +65,13 @@ class LocalNotificationService {
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-      requestCriticalPermission: false,
-    );
+    const DarwinInitializationSettings iosSettings =
+        DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+          requestCriticalPermission: false,
+        );
 
     const InitializationSettings initSettings = InitializationSettings(
       android: androidSettings,
@@ -85,7 +89,9 @@ class LocalNotificationService {
 
   Future<void> _ensureAndroidChannel() async {
     final android = _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android == null) return;
 
     const channel = AndroidNotificationChannel(
@@ -100,9 +106,10 @@ class LocalNotificationService {
 
   Future<void> _requestPermissions() async {
     // Android 13+ membutuhkan POST_NOTIFICATIONS
-    final AndroidFlutterLocalNotificationsPlugin? android =
-        _localNotifications.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+    final AndroidFlutterLocalNotificationsPlugin? android = _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await android?.requestNotificationsPermission();
 
     // iOS/macOS: sudah diminta via DarwinInitializationSettings(request*Permission: true)
@@ -129,7 +136,10 @@ class LocalNotificationService {
   // ===== Polling =====
   void _startPolling() {
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(_pollingInterval, (_) => _checkForNewNotifications());
+    _pollingTimer = Timer.periodic(
+      _pollingInterval,
+      (_) => _checkForNewNotifications(),
+    );
   }
 
   void stopPolling() {
@@ -148,16 +158,18 @@ class LocalNotificationService {
 
       final lastCheck =
           prefs.getString('last_notification_check') ??
-              DateTime.now().subtract(const Duration(days: 1)).toIso8601String();
+          DateTime.now().subtract(const Duration(days: 1)).toIso8601String();
 
       final uri = Uri.parse('$_baseUrl/notifications/recent?since=$lastCheck');
-      final response = await http.get(
-        uri,
-        headers: const {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        }..addAll({'Authorization': 'Bearer $authToken'}),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(
+            uri,
+            headers: const {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            }..addAll({'Authorization': 'Bearer $authToken'}),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         await _processNewNotifications(response.body, prefs);
@@ -172,7 +184,10 @@ class LocalNotificationService {
     }
   }
 
-  Future<void> _processNewNotifications(String responseBody, SharedPreferences prefs) async {
+  Future<void> _processNewNotifications(
+    String responseBody,
+    SharedPreferences prefs,
+  ) async {
     try {
       if (responseBody.isEmpty) return;
       final decoded = jsonDecode(responseBody);
@@ -221,17 +236,18 @@ class LocalNotificationService {
   // ===== Local show / schedule =====
   Future<void> _showLocalNotification(NotificationModel notification) async {
     try {
-      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'royal_clinic_channel',
-        'Royal Clinic Notifications',
-        channelDescription: 'Notifikasi dari Royal Clinic',
-        importance: Importance.high,
-        priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
-        enableVibration: true,
-        playSound: true,
-        showWhen: true,
-      );
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+            'royal_clinic_channel',
+            'Royal Clinic Notifications',
+            channelDescription: 'Notifikasi dari Royal Clinic',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+            enableVibration: true,
+            playSound: true,
+            showWhen: true,
+          );
 
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -239,8 +255,10 @@ class LocalNotificationService {
         presentSound: true,
       );
 
-      const NotificationDetails platformDetails =
-          NotificationDetails(android: androidDetails, iOS: iosDetails);
+      const NotificationDetails platformDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
 
       final payload = {
         ...notification.data,
@@ -273,14 +291,15 @@ class LocalNotificationService {
         return;
       }
 
-      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'royal_clinic_channel',
-        'Royal Clinic Notifications',
-        channelDescription: 'Notifikasi dari Royal Clinic',
-        importance: Importance.high,
-        priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
-      );
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+            'royal_clinic_channel',
+            'Royal Clinic Notifications',
+            channelDescription: 'Notifikasi dari Royal Clinic',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          );
 
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -288,22 +307,26 @@ class LocalNotificationService {
         presentSound: true,
       );
 
-      const NotificationDetails platformDetails =
-          NotificationDetails(android: androidDetails, iOS: iosDetails);
+      const NotificationDetails platformDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
 
-      final tz.TZDateTime tzTime = tz.TZDateTime.from(scheduledTimeLocal, tz.local);
+      final tz.TZDateTime tzTime = tz.TZDateTime.from(
+        scheduledTimeLocal,
+        tz.local,
+      );
 
       await _localNotifications.zonedSchedule(
-  _stableId(id),
-  title,
-  body,
-  tzTime,
-  platformDetails,
-  androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-  matchDateTimeComponents: null, // atau Daily/Time kalau mau berulang
-  payload: jsonEncode({...?data, 'notification_id': id}),
-);
-
+        _stableId(id),
+        title,
+        body,
+        tzTime,
+        platformDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        matchDateTimeComponents: null, // atau Daily/Time kalau mau berulang
+        payload: jsonEncode({...?data, 'notification_id': id}),
+      );
 
       // Simpan catatan ke list lokal (opsional untuk tampilan UI)
       final scheduledNote = NotificationModel(
@@ -396,7 +419,9 @@ class LocalNotificationService {
       );
     }
 
-    final twoHoursBefore = appointmentDateTime.subtract(const Duration(hours: 2));
+    final twoHoursBefore = appointmentDateTime.subtract(
+      const Duration(hours: 2),
+    );
     if (twoHoursBefore.isAfter(now)) {
       await scheduleNotification(
         title: 'Reminder: Jadwal Hari Ini',
@@ -414,11 +439,14 @@ class LocalNotificationService {
       );
     }
 
-    final thirtyMinutesBefore = appointmentDateTime.subtract(const Duration(minutes: 30));
+    final thirtyMinutesBefore = appointmentDateTime.subtract(
+      const Duration(minutes: 30),
+    );
     if (thirtyMinutesBefore.isAfter(now)) {
       await scheduleNotification(
         title: 'Reminder: Segera Berangkat',
-        body: 'Jadwal konsultasi Anda dengan Dr. $doctorName di $poliName dimulai dalam 30 menit.',
+        body:
+            'Jadwal konsultasi Anda dengan Dr. $doctorName di $poliName dimulai dalam 30 menit.',
         scheduledTime: thirtyMinutesBefore,
         data: {
           'type': 'appointment_reminder',
@@ -436,7 +464,9 @@ class LocalNotificationService {
     try {
       // Hapus dari list lokal
       notifications.removeWhere(
-        (n) => n.data['type'] == 'appointment_reminder' && n.data['appointment_id'] == appointmentId,
+        (n) =>
+            n.data['type'] == 'appointment_reminder' &&
+            n.data['appointment_id'] == appointmentId,
       );
 
       await _saveNotificationsToLocal();
@@ -512,9 +542,14 @@ class LocalNotificationService {
   Future<void> _saveNotificationsToLocal() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final notificationsJson =
-          notifications.take(_maxStoredNotifications).map((n) => n.toJson()).toList();
-      await prefs.setString('local_notifications', jsonEncode(notificationsJson));
+      final notificationsJson = notifications
+          .take(_maxStoredNotifications)
+          .map((n) => n.toJson())
+          .toList();
+      await prefs.setString(
+        'local_notifications',
+        jsonEncode(notificationsJson),
+      );
     } catch (e) {
       debugPrint('Error saving notifications: $e');
     }
@@ -527,8 +562,12 @@ class LocalNotificationService {
 
       if (notificationsString != null) {
         final List<dynamic> notificationsJson = jsonDecode(notificationsString);
-        notifications =
-            notificationsJson.map((json) => NotificationModel.fromJson(Map<String, dynamic>.from(json))).toList();
+        notifications = notificationsJson
+            .map(
+              (json) =>
+                  NotificationModel.fromJson(Map<String, dynamic>.from(json)),
+            )
+            .toList();
 
         _notificationController.add(notifications);
       }
@@ -621,7 +660,9 @@ class NotificationModel {
       timestamp: DateTime.parse(json['timestamp']),
       isRead: json['isRead'] ?? false,
       isScheduled: json['isScheduled'] ?? false,
-      scheduledTime: json['scheduledTime'] != null ? DateTime.parse(json['scheduledTime']) : null,
+      scheduledTime: json['scheduledTime'] != null
+          ? DateTime.parse(json['scheduledTime'])
+          : null,
     );
   }
 

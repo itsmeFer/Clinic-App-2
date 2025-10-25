@@ -15,7 +15,7 @@ class DetailEmr extends StatefulWidget {
   final Map<String, dynamic>? pasienInfo;
 
   const DetailEmr({Key? key, required this.kunjungan, this.pasienInfo})
-    : super(key: key);
+      : super(key: key);
 
   @override
   State<DetailEmr> createState() => _DetailEmrState();
@@ -199,12 +199,12 @@ class _DetailEmrState extends State<DetailEmr> {
             ),
             pw.SizedBox(height: 6),
             ...[
-                  'tekanan_darah',
-                  'suhu_tubuh',
-                  'nadi',
-                  'pernapasan',
-                  'saturasi_oksigen',
-                ]
+              'tekanan_darah',
+              'suhu_tubuh',
+              'nadi',
+              'pernapasan',
+              'saturasi_oksigen',
+            ]
                 .where((k) => emr['tanda_vital'][k] != null)
                 .map(
                   (k) => pw.Text(
@@ -467,16 +467,6 @@ class _DetailEmrState extends State<DetailEmr> {
                 },
               ),
 
-              // Download
-              // ListTile(
-              //   leading: const Icon(Icons.download, color: Color(0xFF00897B)),
-              //   title: const Text('Unduh EMR'),
-              //   subtitle: const Text('Simpan sebagai PDF atau gambar'),
-              //   onTap: () {
-              //     Navigator.pop(ctx);
-              //     _downloadEmrChooser();
-              //   },
-              // ),
               const SizedBox(height: 8),
             ],
           ),
@@ -618,9 +608,6 @@ class _DetailEmrState extends State<DetailEmr> {
   // =========================
   // ====== FORMATTERS =======
   // =========================
-  // Ganti fungsi formatDate di DetailEmr.dart (baris ~434-445)
-  // dengan fungsi ini:
-
   String formatDate(String dateString) {
     try {
       if (dateString.isEmpty) return '-';
@@ -655,7 +642,7 @@ class _DetailEmrState extends State<DetailEmr> {
       final number = amount is String
           ? double.parse(amount)
           : (amount as num).toDouble();
-      return 'Rp ${number.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\\d{1,3})(?=(\\d{3})+(?!\\d))'), (Match m) => '${m[1]}.')}';
+      return 'Rp ${number.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}';
     } catch (e) {
       return 'Rp 0';
     }
@@ -934,11 +921,11 @@ class _DetailEmrState extends State<DetailEmr> {
                     totalObat: totalObat,
                     totalTagihan:
                         (payment != null && payment['total_tagihan'] != null)
-                        ? double.tryParse(
-                                payment['total_tagihan'].toString(),
-                              ) ??
-                              (layananTotal + totalObat)
-                        : (layananTotal + totalObat),
+                            ? double.tryParse(
+                                    payment['total_tagihan'].toString(),
+                                  ) ??
+                                (layananTotal + totalObat)
+                            : (layananTotal + totalObat),
                   ),
                 ],
 
@@ -996,15 +983,6 @@ class _DetailEmrState extends State<DetailEmr> {
                   backgroundColor: Colors.white,
                   foregroundColor: const Color(0xFF00897B),
                 ),
-                const SizedBox(height: 8),
-                // FloatingActionButton.extended(
-                //   onPressed: _downloadEmrChooser,
-                //   heroTag: "download",
-                //   icon: const Icon(Icons.download),
-                //   label: const Text('Unduh'),
-                //   backgroundColor: const Color(0xFF00897B),
-                //   foregroundColor: Colors.white,
-                // ),
               ],
             )
           : FloatingActionButton(
