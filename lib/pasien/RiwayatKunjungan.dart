@@ -2,12 +2,11 @@ import 'dart:convert';
 import 'package:RoyalClinic/pasien/PesanJadwal.dart';
 import 'package:RoyalClinic/pasien/dashboardScreen.dart';
 import 'package:RoyalClinic/pasien/edit_profile.dart';
-import 'package:RoyalClinic/pasien/DetailEmr.dart'; // Import halaman DetailEmr baru
+import 'package:RoyalClinic/pasien/DetailEmr.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-// UPDATED: Create a version without bottom navigation for use in MainWrapper
 class RiwayatKunjunganPage extends StatefulWidget {
   const RiwayatKunjunganPage({Key? key}) : super(key: key);
 
@@ -59,7 +58,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
       }
 
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/kunjungan/riwayat/$pasienId'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/kunjungan/riwayat/$pasienId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -71,6 +70,21 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
+        // Debug print untuk melihat data yang diterima
+        print('=== RIWAYAT DATA DEBUG ===');
+        final riwayatData = data['data'] ?? [];
+        for (int i = 0; i < riwayatData.length && i < 3; i++) {
+          final item = riwayatData[i];
+          print('Item $i:');
+          print('  - ID: ${item['id']}');
+          print('  - Status: ${item['status']}');
+          print('  - Status Final: ${item['status_final']}');
+          print('  - Pembayaran: ${item['pembayaran']}');
+          if (item['pembayaran'] != null) {
+            print('  - Status Pembayaran: ${item['pembayaran']['status']}');
+          }
+        }
+        
         setState(() {
           riwayatList = data['data'] ?? [];
           pasienInfo = data['pasien_info'];
@@ -83,6 +97,8 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
         });
       }
     } catch (e) {
+      print('=== FETCH ERROR ===');
+      print('Error: $e');
       if (mounted) {
         setState(() {
           errorMessage = 'Kesalahan koneksi: $e';
@@ -90,6 +106,29 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
         });
       }
     }
+  }
+
+  // Method untuk menentukan status efektif berdasarkan data dari backend
+  String getEffectiveStatus(Map<String, dynamic> kunjungan) {
+    // Prioritas 1: Gunakan status_final jika ada (dari backend)
+    final statusFinal = kunjungan['status_final']?.toString().toLowerCase();
+    if (statusFinal != null && statusFinal.isNotEmpty) {
+      return statusFinal;
+    }
+
+    // Prioritas 2: Cek status pembayaran
+    final pembayaran = kunjungan['pembayaran'];
+    if (pembayaran != null) {
+      final statusPembayaran = pembayaran['status']?.toString().toLowerCase() ?? 
+                              pembayaran['status_pembayaran']?.toString().toLowerCase();
+      if (statusPembayaran == 'sudah bayar') {
+        return 'succeed';
+      }
+    }
+
+    // Prioritas 3: Status kunjungan original
+    final statusKunjungan = kunjungan['status']?.toString().toLowerCase();
+    return statusKunjungan ?? 'pending';
   }
 
   Future<void> batalkanKunjungan(int kunjunganId) async {
@@ -115,7 +154,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
       print('Request Body: $requestBody');
 
       final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/kunjungan/batalkan'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/kunjungan/batalkan'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -159,9 +198,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
             data['status'] == 'success' ||
             data['status'] == 200 ||
             (data['message'] != null &&
-                data['message'].toString().toLowerCase().contains(
-                  'berhasil',
-                ))) {
+                data['message'].toString().toLowerCase().contains('berhasil'))) {
           isSuccess = true;
         }
       }
@@ -290,42 +327,13 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
     }
   }
 
-  String _norm(String? s) =>
-      (s ?? '').replaceAll(RegExp(r'\s+'), '').toLowerCase();
-
-  // Tentukan status efektif untuk UI berdasarkan status kunjungan + pembayaran
-  String effectiveStatus(Map<String, dynamic> kunjungan) {
-    final raw = (kunjungan['status'] ?? '').toString();
-    final paymentStatus = kunjungan['pembayaran']?['status']?.toString();
-
-    // Jika pembayaran sudah "Sudah Bayar", tampilkan sebagai "Selesai"
-    if (_norm(paymentStatus) == 'sudahbayar') {
-      return 'succeed';
-    }
-    return raw;
-  }
-
   String formatDate(String dateString) {
     try {
       if (dateString.isEmpty) return '-';
-
-      // Parse sebagai UTC lalu convert ke local
       final date = DateTime.parse(dateString).toLocal();
-
       final months = [
-        '',
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'Mei',
-        'Jun',
-        'Jul',
-        'Ags',
-        'Sep',
-        'Okt',
-        'Nov',
-        'Des',
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+        'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
       ];
       return '${date.day} ${months[date.month]} ${date.year}';
     } catch (e) {
@@ -336,9 +344,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
   String formatCurrency(dynamic amount) {
     if (amount == null) return 'Rp 0';
     try {
-      final number = amount is String
-          ? double.parse(amount)
-          : amount.toDouble();
+      final number = amount is String ? double.parse(amount) : amount.toDouble();
       return 'Rp ${number.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}';
     } catch (e) {
       return 'Rp 0';
@@ -399,7 +405,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
               borderRadius: BorderRadius.circular(9),
               child: pasienInfo!['foto_pasien'] != null
                   ? Image.network(
-                      'http://10.227.74.71:8000/storage/${pasienInfo!['foto_pasien']}',
+                      'https://admin.royal-klinik.cloud/storage/${pasienInfo!['foto_pasien']}',
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return const Icon(
@@ -492,9 +498,8 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
     );
   }
 
-  // UPDATED: Simplified dialog for basic information only
   void showKunjunganDetail(Map<String, dynamic> kunjungan) {
-    final String statusEff = effectiveStatus(kunjungan);
+    final String statusEff = getEffectiveStatus(kunjungan);
     final dokter = kunjungan['dokter'] ?? {};
 
     showDialog(
@@ -509,7 +514,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: const BoxDecoration(
@@ -541,15 +545,12 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                   ],
                 ),
               ),
-
-              // Content - Simplified for basic info only
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Status Badge
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -585,8 +586,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // Basic Information
                       _buildSimpleInfoCard('Informasi Kunjungan', [
                         _buildSimpleRow(
                           Icons.confirmation_number,
@@ -604,10 +603,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                           kunjungan['keluhan_awal'] ?? '-',
                         ),
                       ]),
-
                       const SizedBox(height: 12),
-
-                      // Doctor Information
                       _buildSimpleInfoCard('Informasi Dokter', [
                         _buildSimpleRow(
                           Icons.person,
@@ -626,8 +622,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                             dokter['no_hp'],
                           ),
                       ]),
-
-                      // EMR Summary and Action Button
                       if (kunjungan['emr'] != null) ...[
                         const SizedBox(height: 16),
                         Container(
@@ -679,9 +673,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
                                   onPressed: () {
-                                    Navigator.pop(
-                                      context,
-                                    ); // Close current dialog
+                                    Navigator.pop(context);
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -710,8 +702,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                           ),
                         ),
                       ],
-
-                      // Additional Info Badges
                       if (kunjungan['resep_obat'] != null ||
                           kunjungan['pembayaran'] != null) ...[
                         const SizedBox(height: 12),
@@ -1014,16 +1004,12 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                   itemBuilder: (context, index) {
                     final kunjungan = riwayatList[index];
                     final dokter = kunjungan['dokter'];
-                    final status = effectiveStatus(kunjungan);
+                    final status = getEffectiveStatus(kunjungan); // FIXED: Menggunakan method yang benar
                     final hasEMR = kunjungan['emr'] != null;
-                    final hasPrescription =
-                        kunjungan['resep_obat'] != null &&
+                    final hasPrescription = kunjungan['resep_obat'] != null &&
                         kunjungan['resep_obat'].isNotEmpty;
                     final payment = kunjungan['pembayaran'];
-                    final canCancel = [
-                      'pending',
-                      'waiting',
-                    ].contains(status.toLowerCase());
+                    final canCancel = ['pending', 'waiting'].contains(status.toLowerCase());
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -1052,25 +1038,22 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                     width: 60,
                                     height: 60,
                                     decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFF00897B,
-                                      ).withOpacity(0.1),
+                                      color: const Color(0xFF00897B).withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(12),
                                       child: dokter?['foto_dokter'] != null
                                           ? Image.network(
-                                              'http://10.227.74.71:8000/storage/${dokter['foto_dokter']}',
+                                              'https://admin.royal-klinik.cloud/storage/${dokter['foto_dokter']}',
                                               fit: BoxFit.cover,
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                    return const Icon(
-                                                      Icons.person,
-                                                      size: 32,
-                                                      color: Color(0xFF00897B),
-                                                    );
-                                                  },
+                                              errorBuilder: (context, error, stackTrace) {
+                                                return const Icon(
+                                                  Icons.person,
+                                                  size: 32,
+                                                  color: Color(0xFF00897B),
+                                                );
+                                              },
                                             )
                                           : const Icon(
                                               Icons.person,
@@ -1082,12 +1065,10 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          dokter?['nama_dokter'] ??
-                                              'Nama tidak tersedia',
+                                          dokter?['nama_dokter'] ?? 'Nama tidak tersedia',
                                           style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
@@ -1096,17 +1077,13 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          formatDate(
-                                            kunjungan['tanggal_kunjungan'] ??
-                                                '',
-                                          ),
+                                          formatDate(kunjungan['tanggal_kunjungan'] ?? ''),
                                           style: TextStyle(
                                             fontSize: 13,
                                             color: Colors.grey.shade600,
                                           ),
                                         ),
-                                        if (dokter?['spesialisasi'] !=
-                                            null) ...[
+                                        if (dokter?['spesialisasi'] != null) ...[
                                           const SizedBox(height: 2),
                                           Text(
                                             'Poli ${dokter['spesialisasi']}',
@@ -1126,9 +1103,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: getStatusColor(
-                                        status,
-                                      ).withOpacity(0.1),
+                                      color: getStatusColor(status).withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: getStatusColor(status),
@@ -1158,7 +1133,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                 ],
                               ),
                               const SizedBox(height: 12),
-
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -1187,8 +1161,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                     ),
                                     const SizedBox(height: 6),
                                     Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         const Icon(
                                           Icons.medical_services,
@@ -1212,11 +1185,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                   ],
                                 ),
                               ),
-
-                              // Badges tambahan (EMR/Resep/Pembayaran)
-                              if (hasEMR ||
-                                  hasPrescription ||
-                                  payment != null) ...[
+                              if (hasEMR || hasPrescription || payment != null) ...[
                                 const SizedBox(height: 8),
                                 Wrap(
                                   spacing: 6,
@@ -1230,9 +1199,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.blue.shade100,
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
+                                          borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -1262,9 +1229,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.purple.shade100,
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
+                                          borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -1293,13 +1258,10 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                           vertical: 4,
                                         ),
                                         decoration: BoxDecoration(
-                                          color:
-                                              payment['status'] == 'Sudah Bayar'
+                                          color: payment['status'] == 'Sudah Bayar'
                                               ? Colors.green.shade100
                                               : Colors.orange.shade100,
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
+                                          borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -1309,23 +1271,17 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                                   ? Icons.check_circle
                                                   : Icons.payment,
                                               size: 12,
-                                              color:
-                                                  payment['status'] ==
-                                                      'Sudah Bayar'
+                                              color: payment['status'] == 'Sudah Bayar'
                                                   ? Colors.green.shade700
                                                   : Colors.orange.shade700,
                                             ),
                                             const SizedBox(width: 4),
                                             Text(
-                                              formatCurrency(
-                                                payment['total_tagihan'],
-                                              ),
+                                              formatCurrency(payment['total_tagihan']),
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w600,
-                                                color:
-                                                    payment['status'] ==
-                                                        'Sudah Bayar'
+                                                color: payment['status'] == 'Sudah Bayar'
                                                     ? Colors.green.shade700
                                                     : Colors.orange.shade700,
                                               ),
@@ -1336,7 +1292,6 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                   ],
                                 ),
                               ],
-
                               if (canCancel) ...[
                                 const SizedBox(height: 12),
                                 SizedBox(
@@ -1345,9 +1300,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.red.shade500,
                                       foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -1358,20 +1311,15 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                         context: context,
                                         builder: (context) => AlertDialog(
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
+                                            borderRadius: BorderRadius.circular(16),
                                           ),
                                           title: Row(
                                             children: [
                                               Container(
-                                                padding: const EdgeInsets.all(
-                                                  8,
-                                                ),
+                                                padding: const EdgeInsets.all(8),
                                                 decoration: BoxDecoration(
                                                   color: Colors.red.shade50,
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
+                                                  borderRadius: BorderRadius.circular(8),
                                                 ),
                                                 child: Icon(
                                                   Icons.cancel,
@@ -1393,40 +1341,26 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                           ),
                                           content: Text(
                                             'Apakah Anda yakin ingin membatalkan kunjungan dengan Dr. ${dokter?['nama_dokter'] ?? 'Dokter'} pada ${formatDate(kunjungan['tanggal_kunjungan'] ?? '')}?',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                            ),
+                                            style: const TextStyle(fontSize: 14),
                                           ),
                                           actions: [
                                             Row(
                                               children: [
                                                 Expanded(
                                                   child: TextButton(
-                                                    onPressed: () =>
-                                                        Navigator.pop(context),
+                                                    onPressed: () => Navigator.pop(context),
                                                     style: TextButton.styleFrom(
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            vertical: 12,
-                                                          ),
+                                                      padding: const EdgeInsets.symmetric(vertical: 12),
                                                       shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              8,
-                                                            ),
-                                                        side: BorderSide(
-                                                          color: Colors
-                                                              .grey
-                                                              .shade300,
-                                                        ),
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        side: BorderSide(color: Colors.grey.shade300),
                                                       ),
                                                     ),
                                                     child: const Text(
                                                       'Tidak',
                                                       style: TextStyle(
                                                         fontSize: 15,
-                                                        fontWeight:
-                                                            FontWeight.w600,
+                                                        fontWeight: FontWeight.w600,
                                                         color: Colors.black87,
                                                       ),
                                                     ),
@@ -1437,24 +1371,14 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                                   child: ElevatedButton(
                                                     onPressed: () {
                                                       Navigator.pop(context);
-                                                      batalkanKunjungan(
-                                                        kunjungan['id'],
-                                                      );
+                                                      batalkanKunjungan(kunjungan['id']);
                                                     },
                                                     style: ElevatedButton.styleFrom(
-                                                      backgroundColor:
-                                                          Colors.red.shade500,
-                                                      foregroundColor:
-                                                          Colors.white,
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            vertical: 12,
-                                                          ),
+                                                      backgroundColor: Colors.red.shade500,
+                                                      foregroundColor: Colors.white,
+                                                      padding: const EdgeInsets.symmetric(vertical: 12),
                                                       shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              8,
-                                                            ),
+                                                        borderRadius: BorderRadius.circular(8),
                                                       ),
                                                       elevation: 0,
                                                     ),
@@ -1462,8 +1386,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                                       'Ya, Batalkan',
                                                       style: TextStyle(
                                                         fontSize: 15,
-                                                        fontWeight:
-                                                            FontWeight.w600,
+                                                        fontWeight: FontWeight.w600,
                                                       ),
                                                     ),
                                                   ),
@@ -1475,8 +1398,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                       );
                                     },
                                     child: const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                      mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Icon(Icons.cancel, size: 18),
                                         SizedBox(width: 8),
@@ -1505,7 +1427,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
   }
 }
 
-// UPDATED: Original RiwayatKunjungan for standalone use (with bottom navigation)
+// Standalone RiwayatKunjungan untuk penggunaan terpisah
 class RiwayatKunjungan extends StatelessWidget {
   const RiwayatKunjungan({Key? key}) : super(key: key);
 
@@ -1524,7 +1446,7 @@ class RiwayatKunjungan extends StatelessWidget {
   }
 }
 
-// UPDATED: MainWrapperWithIndex now uses RiwayatKunjunganPage (without bottom nav)
+// MainWrapper dengan bottom navigation
 class MainWrapperWithIndex extends StatefulWidget {
   final int initialIndex;
   const MainWrapperWithIndex({super.key, required this.initialIndex});
@@ -1555,7 +1477,7 @@ class _MainWrapperWithIndexState extends State<MainWrapperWithIndex> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.227.74.71:8000/api/getAllDokter'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/getAllDokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',

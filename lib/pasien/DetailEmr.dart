@@ -247,36 +247,37 @@ class _DetailEmrState extends State<DetailEmr> {
           ],
 
           // Resep
-          if (resepList.isNotEmpty) ...[
-            pw.SizedBox(height: 10),
-            pw.Text(
-              'Resep Obat',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 6),
-            pw.Table.fromTextArray(
-              headers: ['Obat', 'Dosis', 'Jumlah', 'Subtotal'],
-              data: resepList
-                  .map(
-                    (r) => [
-                      (r['nama_obat'] ?? '-').toString(),
-                      (r['dosis'] ?? '-').toString(),
-                      (r['jumlah'] ?? '-').toString(),
-                      (r['subtotal'] ?? '-').toString(),
-                    ],
-                  )
-                  .toList(),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              cellAlignment: pw.Alignment.centerLeft,
-            ),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 6),
-                child: pw.Text('Total Obat: $totalObat'),
-              ),
-            ),
+if (resepList.isNotEmpty) ...[
+  pw.SizedBox(height: 10),
+  pw.Text(
+    'Resep Obat',
+    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+  ),
+  pw.SizedBox(height: 6),
+  pw.Table.fromTextArray(
+    headers: ['Obat', 'Dosis', 'Jumlah', 'Keterangan', 'Subtotal'],
+    data: resepList
+        .map(
+          (r) => [
+            (r['nama_obat'] ?? '-').toString(),
+            (r['dosis'] ?? '-').toString(),
+            (r['jumlah'] ?? '-').toString(),
+            (r['keterangan'] ?? 'Sesuai anjuran dokter').toString(),
+            (r['subtotal'] ?? '-').toString(),
           ],
+        )
+        .toList(),
+    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+    cellAlignment: pw.Alignment.centerLeft,
+  ),
+  pw.Align(
+    alignment: pw.Alignment.centerRight,
+    child: pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 6),
+      child: pw.Text('Total Obat: $totalObat'),
+    ),
+  ),
+],
 
           // Pembayaran
           if (pembayaran.isNotEmpty) ...[
@@ -612,7 +613,6 @@ class _DetailEmrState extends State<DetailEmr> {
     try {
       if (dateString.isEmpty) return '-';
 
-      // Parse sebagai UTC lalu convert ke local
       final date = DateTime.parse(dateString).toLocal();
 
       final months = [
@@ -677,15 +677,56 @@ class _DetailEmrState extends State<DetailEmr> {
     final services = (widget.kunjungan['layanan'] ?? []) as List;
     final payment = widget.kunjungan['pembayaran'];
 
-    // Hitung total layanan sebagai fallback jika payment['biaya_konsultasi'] null
+    // FIXED: Hitung total dari data yang ada dengan validasi yang tepat
     final layananTotal = services.fold<double>(0, (sum, it) {
-      final sub = (it['subtotal'] ?? 0).toString();
-      return sum + (double.tryParse(sub) ?? 0);
+      final sub = it['subtotal'];
+      if (sub == null) return sum;
+      if (sub is String) {
+        return sum + (double.tryParse(sub) ?? 0);
+      }
+      return sum + (sub is num ? sub.toDouble() : 0);
     });
+    
     final totalObat = prescriptions.fold<double>(0, (sum, it) {
-      final sub = (it['subtotal'] ?? 0).toString();
-      return sum + (double.tryParse(sub) ?? 0);
+      final sub = it['subtotal'];
+      if (sub == null) return sum;
+      if (sub is String) {
+        return sum + (double.tryParse(sub) ?? 0);
+      }
+      return sum + (sub is num ? sub.toDouble() : 0);
     });
+
+    // FIXED: Ambil biaya konsultasi dari pembayaran atau hitung dari layanan
+    double biayaKonsultasi = 0;
+    if (payment != null && payment['biaya_konsultasi'] != null) {
+      final biayaFromPayment = payment['biaya_konsultasi'];
+      if (biayaFromPayment is String) {
+        biayaKonsultasi = double.tryParse(biayaFromPayment) ?? 0;
+      } else if (biayaFromPayment is num) {
+        biayaKonsultasi = biayaFromPayment.toDouble();
+      }
+    }
+    
+    // Jika biaya konsultasi 0 atau tidak ada, gunakan total layanan atau default
+    if (biayaKonsultasi <= 0) {
+      biayaKonsultasi = layananTotal > 0 ? layananTotal : 150000.0;
+    }
+
+    // Total tagihan
+    double totalTagihan = 0;
+    if (payment != null && payment['total_tagihan'] != null) {
+      final totalFromPayment = payment['total_tagihan'];
+      if (totalFromPayment is String) {
+        totalTagihan = double.tryParse(totalFromPayment) ?? 0;
+      } else if (totalFromPayment is num) {
+        totalTagihan = totalFromPayment.toDouble();
+      }
+    }
+    
+    // Jika total tagihan 0 atau tidak ada, hitung dari komponen
+    if (totalTagihan <= 0) {
+      totalTagihan = biayaKonsultasi + totalObat;
+    }
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -777,123 +818,16 @@ class _DetailEmrState extends State<DetailEmr> {
 
                 const SizedBox(height: 20),
 
-                // Informasi Kunjungan (lengkap)
-                _buildSection(
-                  'Informasi Kunjungan',
-                  Icons.info_outline,
-                  Colors.blue,
-                  [
-                    _buildDetailRow(
-                      Icons.confirmation_number,
-                      'No. Antrian',
-                      widget.kunjungan['no_antrian']?.toString() ?? '-',
-                    ),
-                    _buildDetailRow(
-                      Icons.calendar_today,
-                      'Tanggal',
-                      formatDate(widget.kunjungan['tanggal_kunjungan'] ?? ''),
-                    ),
-                    _buildDetailRow(
-                      Icons.verified,
-                      'Status Kunjungan',
-                      widget.kunjungan['status']?.toString() ?? '-',
-                    ),
-                    _buildDetailRow(
-                      Icons.medical_services,
-                      'Keluhan Awal',
-                      widget.kunjungan['keluhan_awal']?.toString() ?? '-',
-                      isMultiline: true,
-                    ),
-                    if ((emr['tanggal_pemeriksaan'] ?? '')
-                        .toString()
-                        .isNotEmpty)
-                      _buildDetailRow(
-                        Icons.event_available,
-                        'Tanggal Pemeriksaan EMR',
-                        formatDate(emr['tanggal_pemeriksaan'].toString()),
-                      ),
-                  ],
-                ),
-
+                // Informasi Kunjungan
+                _buildKunjunganInfoSection(),
                 const SizedBox(height: 16),
 
                 // Informasi Dokter
-                _buildSection('Informasi Dokter', Icons.person, Colors.green, [
-                  _buildDetailRow(
-                    Icons.person,
-                    'Nama Dokter',
-                    dokter['nama_dokter']?.toString() ?? '-',
-                  ),
-                  _buildDetailRow(
-                    Icons.local_hospital,
-                    'Spesialisasi / Poli',
-                    dokter['spesialisasi']?.toString() ?? 'Umum',
-                  ),
-                  if ((dokter['no_hp'] ?? '').toString().isNotEmpty)
-                    _buildDetailRow(
-                      Icons.phone,
-                      'No. HP',
-                      dokter['no_hp'].toString(),
-                    ),
-                  if ((dokter['pengalaman'] ?? '').toString().isNotEmpty)
-                    _buildDetailRow(
-                      Icons.work_outline,
-                      'Pengalaman',
-                      dokter['pengalaman'].toString(),
-                    ),
-                ]),
-
+                _buildDokterInfoSection(),
                 const SizedBox(height: 16),
 
                 // EMR
-                _buildSection(
-                  'Rekam Medis Elektronik',
-                  Icons.medical_information,
-                  const Color(0xFF00897B),
-                  [
-                    if ((emr['keluhan_utama'] ?? '').toString().isNotEmpty)
-                      _buildDetailRow(
-                        Icons.sick,
-                        'Keluhan Utama',
-                        emr['keluhan_utama'].toString(),
-                        isMultiline: true,
-                      ),
-                    if ((emr['diagnosis'] ?? '').toString().isNotEmpty)
-                      _buildDetailRow(
-                        Icons.medical_services,
-                        'Diagnosis',
-                        emr['diagnosis'].toString(),
-                        isMultiline: true,
-                      ),
-                    if ((emr['riwayat_penyakit_sekarang'] ?? '')
-                        .toString()
-                        .isNotEmpty)
-                      _buildDetailRow(
-                        Icons.timeline,
-                        'Riwayat Penyakit Sekarang',
-                        emr['riwayat_penyakit_sekarang'].toString(),
-                        isMultiline: true,
-                      ),
-                    if ((emr['riwayat_penyakit_dahulu'] ?? '')
-                        .toString()
-                        .isNotEmpty)
-                      _buildDetailRow(
-                        Icons.history,
-                        'Riwayat Penyakit Dahulu',
-                        emr['riwayat_penyakit_dahulu'].toString(),
-                        isMultiline: true,
-                      ),
-                    if ((emr['riwayat_penyakit_keluarga'] ?? '')
-                        .toString()
-                        .isNotEmpty)
-                      _buildDetailRow(
-                        Icons.family_restroom,
-                        'Riwayat Penyakit Keluarga',
-                        emr['riwayat_penyakit_keluarga'].toString(),
-                        isMultiline: true,
-                      ),
-                  ],
-                ),
+                _buildEmrSection(),
 
                 // Tanda Vital
                 if (vitalSigns != null) ...[
@@ -901,7 +835,7 @@ class _DetailEmrState extends State<DetailEmr> {
                   _buildVitalSignsSection(vitalSigns),
                 ],
 
-                // Layanan (BARU)
+                // Layanan
                 if (services.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _buildServicesSection(services, layananTotal),
@@ -910,22 +844,16 @@ class _DetailEmrState extends State<DetailEmr> {
                 // Resep
                 if (prescriptions.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  _buildPrescriptionSection(prescriptions),
+                  _buildPrescriptionSection(prescriptions, totalObat),
                 ],
 
-                // Ringkasan Biaya (gabungan layanan + obat)
+                // Ringkasan Biaya
                 if (services.isNotEmpty || prescriptions.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _buildCostSummarySection(
-                    layananTotal: layananTotal,
+                    biayaKonsultasi: biayaKonsultasi,
                     totalObat: totalObat,
-                    totalTagihan:
-                        (payment != null && payment['total_tagihan'] != null)
-                            ? double.tryParse(
-                                    payment['total_tagihan'].toString(),
-                                  ) ??
-                                (layananTotal + totalObat)
-                            : (layananTotal + totalObat),
+                    totalTagihan: totalTagihan,
                   ),
                 ],
 
@@ -994,7 +922,121 @@ class _DetailEmrState extends State<DetailEmr> {
     );
   }
 
-  // ===== Reusable sections =====
+  Widget _buildKunjunganInfoSection() {
+    return _buildSection(
+      'Informasi Kunjungan',
+      Icons.info_outline,
+      Colors.blue,
+      [
+        _buildDetailRow(
+          Icons.confirmation_number,
+          'No. Antrian',
+          widget.kunjungan['no_antrian']?.toString() ?? '-',
+        ),
+        _buildDetailRow(
+          Icons.calendar_today,
+          'Tanggal Kunjungan',
+          formatDate(widget.kunjungan['tanggal_kunjungan'] ?? ''),
+        ),
+        _buildDetailRow(
+          Icons.verified,
+          'Status Kunjungan',
+          widget.kunjungan['status']?.toString() ?? '-',
+        ),
+        _buildDetailRow(
+          Icons.medical_services,
+          'Keluhan Awal',
+          widget.kunjungan['keluhan_awal']?.toString() ?? '-',
+          isMultiline: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDokterInfoSection() {
+    final dokter = widget.kunjungan['dokter'] ?? {};
+    return _buildSection(
+      'Informasi Dokter',
+      Icons.person,
+      Colors.green,
+      [
+        _buildDetailRow(
+          Icons.person,
+          'Nama Dokter',
+          dokter['nama_dokter']?.toString() ?? '-',
+        ),
+        _buildDetailRow(
+          Icons.local_hospital,
+          'Spesialisasi',
+          dokter['spesialisasi']?.toString() ?? 'Umum',
+        ),
+        if ((dokter['no_hp'] ?? '').toString().isNotEmpty)
+          _buildDetailRow(
+            Icons.phone,
+            'No. HP',
+            dokter['no_hp'].toString(),
+          ),
+        if ((dokter['pengalaman'] ?? '').toString().isNotEmpty)
+          _buildDetailRow(
+            Icons.work_outline,
+            'Pengalaman',
+            dokter['pengalaman'].toString(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEmrSection() {
+    final emr = widget.kunjungan['emr'] ?? {};
+    return _buildSection(
+      'Rekam Medis Elektronik',
+      Icons.medical_information,
+      const Color(0xFF00897B),
+      [
+        if ((emr['keluhan_utama'] ?? '').toString().isNotEmpty)
+          _buildDetailRow(
+            Icons.sick,
+            'Keluhan Utama',
+            emr['keluhan_utama'].toString(),
+            isMultiline: true,
+          ),
+        if ((emr['diagnosis'] ?? '').toString().isNotEmpty)
+          _buildDetailRow(
+            Icons.medical_services,
+            'Diagnosis',
+            emr['diagnosis'].toString(),
+            isMultiline: true,
+          ),
+        if ((emr['riwayat_penyakit_sekarang'] ?? '').toString().isNotEmpty)
+          _buildDetailRow(
+            Icons.timeline,
+            'Riwayat Penyakit Sekarang',
+            emr['riwayat_penyakit_sekarang'].toString(),
+            isMultiline: true,
+          ),
+        if ((emr['riwayat_penyakit_dahulu'] ?? '').toString().isNotEmpty)
+          _buildDetailRow(
+            Icons.history,
+            'Riwayat Penyakit Dahulu',
+            emr['riwayat_penyakit_dahulu'].toString(),
+            isMultiline: true,
+          ),
+        if ((emr['riwayat_penyakit_keluarga'] ?? '').toString().isNotEmpty)
+          _buildDetailRow(
+            Icons.family_restroom,
+            'Riwayat Penyakit Keluarga',
+            emr['riwayat_penyakit_keluarga'].toString(),
+            isMultiline: true,
+          ),
+        if ((emr['tanggal_pemeriksaan'] ?? '').toString().isNotEmpty)
+          _buildDetailRow(
+            Icons.event_available,
+            'Tanggal Pemeriksaan',
+            formatDate(emr['tanggal_pemeriksaan'].toString()),
+          ),
+      ],
+    );
+  }
 
   Widget _buildSection(
     String title,
@@ -1242,7 +1284,6 @@ class _DetailEmrState extends State<DetailEmr> {
     );
   }
 
-  // ====== LAYANAN (BARU) ======
   Widget _buildServicesSection(List<dynamic> services, double layananTotal) {
     return Container(
       width: double.infinity,
@@ -1279,7 +1320,7 @@ class _DetailEmrState extends State<DetailEmr> {
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    'Layanan (${services.length})',
+                    'Layanan (${services.length} item)',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -1355,16 +1396,34 @@ class _DetailEmrState extends State<DetailEmr> {
                     ),
                   );
                 }).toList(),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    'Total Layanan: ${formatCurrency(layananTotal)}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black87,
-                    ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total Layanan:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.teal.shade700,
+                        ),
+                      ),
+                      Text(
+                        formatCurrency(layananTotal),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade800,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1375,57 +1434,62 @@ class _DetailEmrState extends State<DetailEmr> {
     );
   }
 
-  // ====== RESEP ======
-  Widget _buildPrescriptionSection(List<dynamic> prescriptions) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.purple.shade100,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
-              ),
+Widget _buildPrescriptionSection(List<dynamic> prescriptions, double totalObat) {
+  return Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 10,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.purple.shade100,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(12),
             ),
-            child: Row(
-              children: [
-                Icon(Icons.medication, size: 20, color: Colors.purple.shade700),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    'Resep Obat (${prescriptions.length})',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.purple.shade700,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.medication, size: 20, color: Colors.purple.shade700),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Resep Obat (${prescriptions.length} item)',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.purple.shade700,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: prescriptions.asMap().entries.map<Widget>((entry) {
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              ...prescriptions.asMap().entries.map<Widget>((entry) {
                 final index = entry.key;
                 final prescription = entry.value as Map<String, dynamic>;
+                
+                // Ambil keterangan dengan validasi
+                final keterangan = prescription['keterangan']?.toString() ?? '';
+                final hasKeterangan = keterangan.isNotEmpty && keterangan != 'null';
+                
                 return Container(
                   margin: EdgeInsets.only(
                     bottom: index < prescriptions.length - 1 ? 12 : 0,
@@ -1439,13 +1503,12 @@ class _DetailEmrState extends State<DetailEmr> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Header obat dengan status
                       Row(
                         children: [
                           Expanded(
                             child: Text(
-                              (prescription['nama_obat'] ??
-                                      'Obat tidak dikenal')
-                                  .toString(),
+                              prescription['nama_obat']?.toString() ?? 'Obat tidak dikenal',
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -1468,8 +1531,7 @@ class _DetailEmrState extends State<DetailEmr> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              (prescription['status'] ?? 'Belum Diambil')
-                                  .toString(),
+                              prescription['status']?.toString() ?? 'Belum Diambil',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -1482,10 +1544,13 @@ class _DetailEmrState extends State<DetailEmr> {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      
+                      // Detail obat dalam grid responsif
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final screenWidth = constraints.maxWidth;
                           if (screenWidth > 400) {
+                            // Layout untuk layar lebar
                             return Column(
                               children: [
                                 Row(
@@ -1493,15 +1558,14 @@ class _DetailEmrState extends State<DetailEmr> {
                                     Expanded(
                                       child: _buildPrescriptionDetail(
                                         'Dosis',
-                                        (prescription['dosis'] ?? '-')
-                                            .toString(),
+                                        prescription['dosis']?.toString() ?? '-',
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: _buildPrescriptionDetail(
                                         'Jumlah',
-                                        '${prescription['jumlah'] ?? 0}',
+                                        '${prescription['jumlah'] ?? 0} pcs',
                                       ),
                                     ),
                                   ],
@@ -1512,18 +1576,14 @@ class _DetailEmrState extends State<DetailEmr> {
                                     Expanded(
                                       child: _buildPrescriptionDetail(
                                         'Harga/item',
-                                        formatCurrency(
-                                          prescription['harga_per_item'],
-                                        ),
+                                        formatCurrency(prescription['harga_per_item']),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: _buildPrescriptionDetail(
                                         'Subtotal',
-                                        formatCurrency(
-                                          prescription['subtotal'],
-                                        ),
+                                        formatCurrency(prescription['subtotal']),
                                       ),
                                     ),
                                   ],
@@ -1531,25 +1591,24 @@ class _DetailEmrState extends State<DetailEmr> {
                               ],
                             );
                           } else {
+                            // Layout untuk layar sempit
                             return Column(
                               children: [
                                 _buildPrescriptionDetail(
                                   'Dosis',
-                                  (prescription['dosis'] ?? '-').toString(),
+                                  prescription['dosis']?.toString() ?? '-',
                                   isFullWidth: true,
                                 ),
                                 const SizedBox(height: 6),
                                 _buildPrescriptionDetail(
                                   'Jumlah',
-                                  '${prescription['jumlah'] ?? 0}',
+                                  '${prescription['jumlah'] ?? 0} pcs',
                                   isFullWidth: true,
                                 ),
                                 const SizedBox(height: 6),
                                 _buildPrescriptionDetail(
                                   'Harga/item',
-                                  formatCurrency(
-                                    prescription['harga_per_item'],
-                                  ),
+                                  formatCurrency(prescription['harga_per_item']),
                                   isFullWidth: true,
                                 ),
                                 const SizedBox(height: 6),
@@ -1563,26 +1622,133 @@ class _DetailEmrState extends State<DetailEmr> {
                           }
                         },
                       ),
-                      if ((prescription['keterangan'] ?? '')
-                          .toString()
-                          .isNotEmpty) ...[
+                      
+                      // KETERANGAN OBAT - DIPERBAIKI
+                      if (hasKeterangan) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.blue.shade200,
+                              width: 1,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 14,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Keterangan & Aturan Pakai:',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                keterangan,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade800,
+                                  height: 1.3,
+                                ),
+                                textAlign: TextAlign.justify,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      
+                      // Keterangan default jika tidak ada keterangan spesifik
+                      if (!hasKeterangan) ...[
                         const SizedBox(height: 8),
-                        _buildPrescriptionDetail(
-                          'Keterangan',
-                          prescription['keterangan'].toString(),
-                          isFullWidth: true,
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.medical_services_outlined,
+                                size: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Gunakan sesuai anjuran dokter',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade700,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ],
                   ),
                 );
               }).toList(),
-            ),
+              
+              // Total obat
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total Biaya Obat:',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.purple.shade700,
+                      ),
+                    ),
+                    Text(
+                      formatCurrency(totalObat),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.purple.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildPrescriptionDetail(
     String label,
@@ -1615,9 +1781,8 @@ class _DetailEmrState extends State<DetailEmr> {
     );
   }
 
-  // ====== RINGKASAN BIAYA (BARU) ======
   Widget _buildCostSummarySection({
-    required double layananTotal,
+    required double biayaKonsultasi,
     required double totalObat,
     required double totalTagihan,
   }) {
@@ -1674,19 +1839,45 @@ class _DetailEmrState extends State<DetailEmr> {
               children: [
                 _buildDetailRow(
                   Icons.medical_services_outlined,
-                  'Total Layanan',
-                  formatCurrency(layananTotal),
+                  'Biaya Konsultasi/Layanan',
+                  formatCurrency(biayaKonsultasi),
                 ),
                 _buildDetailRow(
                   Icons.medication,
-                  'Total Obat',
+                  'Total Biaya Obat',
                   formatCurrency(totalObat),
                 ),
-                const Divider(),
-                _buildDetailRow(
-                  Icons.attach_money,
-                  'Perkiraan Total',
-                  formatCurrency(totalTagihan),
+                const SizedBox(height: 8),
+                const Divider(thickness: 1),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'TOTAL TAGIHAN:',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade700,
+                        ),
+                      ),
+                      Text(
+                        formatCurrency(totalTagihan),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1696,7 +1887,6 @@ class _DetailEmrState extends State<DetailEmr> {
     );
   }
 
-  // ====== PEMBAYARAN (DIPERLUAS) ======
   Widget _buildPaymentSection(Map<String, dynamic> payment) {
     return Container(
       width: double.infinity,

@@ -84,7 +84,7 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
 
   try {
     final response = await http.post(
-      Uri.parse('http://10.227.74.71:8000/api/register'),
+      Uri.parse('https://admin.royal-klinik.cloud/api/register'),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json', // penting agar Laravel kirim JSON validation
@@ -137,7 +137,7 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
       print('Starting auto-login process');
       
       final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/login'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -164,7 +164,7 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
         try {
           print('Fetching user profile');
           final profileResponse = await http.get(
-            Uri.parse('http://10.227.74.71:8000/api/pasien/profile'),
+            Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
             headers: {
               'Authorization': 'Bearer ${data['data']['token']}',
               'Content-Type': 'application/json',

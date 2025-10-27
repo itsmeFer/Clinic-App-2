@@ -112,7 +112,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> with TickerProv
 
     try {
       final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/forgot-password/send-otp'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/forgot-password/send-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': _emailController.text.trim()}),
       );
@@ -140,7 +140,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> with TickerProv
 
     try {
       final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/forgot-password/send-otp'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/forgot-password/send-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': _userEmail}),
       );
@@ -171,7 +171,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> with TickerProv
 
     try {
       final response = await http.post(
-        Uri.parse('http://10.227.74.71:8000/api/forgot-password/reset'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/forgot-password/reset'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': _userEmail,

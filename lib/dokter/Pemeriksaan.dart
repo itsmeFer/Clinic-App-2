@@ -58,7 +58,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
   Timer? _layananSearchDebounce;
 
   // API Configuration
-  static const String baseUrl = 'http://10.227.74.71:8000/api';
+  static const String baseUrl = 'https://admin.royal-klinik.cloud/api';
   String? _authToken;
 
   // Performance optimization: Cache filtered results

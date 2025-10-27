@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,15 +12,137 @@ class ListPembayaran extends StatefulWidget {
   State<ListPembayaran> createState() => _ListPembayaranState();
 }
 
-class _ListPembayaranState extends State<ListPembayaran> {
+class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStateMixin {
   bool isLoading = true;
   String? errorMessage;
   List<Map<String, dynamic>> pembayaranList = [];
+  List<Map<String, dynamic>> filteredList = [];
+  
+  // Search and filter controllers
+  final TextEditingController _searchController = TextEditingController();
+  String _selectedSortBy = 'tanggal_desc';
+  String _selectedStatus = 'semua';
+  
+  // Animated search like artikel page
+  bool isSearchActive = false;
+  bool isTyping = false;
+  
+  late AnimationController _searchAnimationController;
+  late AnimationController _typingTextController;
+  late Animation<double> _scaleAnimation;
+  late Animation<Color?> _colorAnimation;
+  
+  // Typing placeholder animation
+  Timer? _typingTimer;
+  String _currentText = '';
+  final String _fullText = 'Cari nama pasien, poli, kode transaksi, atau diagnosis...';
+  
+  // Debounce for search
+  DateTime? _lastTypeTs;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize animation controllers
+    _searchAnimationController = AnimationController(
+      vsync: this, 
+      duration: const Duration(milliseconds: 300),
+    );
+    _typingTextController = AnimationController(
+      vsync: this, 
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(
+        parent: _searchAnimationController,
+        curve: Curves.elasticOut,
+      ),
+    );
+
+    _colorAnimation = ColorTween(
+      begin: Colors.grey.shade500,
+      end: const Color(0xFF00897B),
+    ).animate(_searchAnimationController);
+
+    _startTypingAnimation();
+    
     fetchListPembayaran();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    _typingTextController.dispose();
+    _searchAnimationController.dispose();
+    _typingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startTypingAnimation() {
+    _typingTimer?.cancel();
+    _currentText = '';
+    _typingTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) {
+      if (!mounted) return;
+      if (_searchController.text.isEmpty && !isSearchActive) {
+        setState(() {
+          if (_currentText.length < _fullText.length) {
+            _currentText = _fullText.substring(0, _currentText.length + 1);
+          } else {
+            // Hold then reset
+            Future.delayed(const Duration(milliseconds: 2200), () {
+              if (!mounted) return;
+              if (_searchController.text.isEmpty && !isSearchActive) {
+                setState(() => _currentText = '');
+                _startTypingAnimation();
+              }
+            });
+            timer.cancel();
+          }
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  void _onSearchChanged() {
+    isTyping = _searchController.text.isNotEmpty;
+    isSearchActive = _searchController.text.isNotEmpty;
+
+    if (isSearchActive) {
+      _searchAnimationController.forward();
+    } else {
+      _searchAnimationController.reverse();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        if (_searchController.text.isEmpty) _startTypingAnimation();
+      });
+    }
+
+    // Debounce 250ms
+    _lastTypeTs = DateTime.now();
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      if (_lastTypeTs != null &&
+          DateTime.now().difference(_lastTypeTs!) >= const Duration(milliseconds: 250)) {
+        setState(() => _applyFiltersAndSort());
+      }
+    });
+  }
+
+  void clearSearch() {
+    _searchController.clear();
+    _searchAnimationController.reverse();
+    setState(() {
+      isSearchActive = false;
+      isTyping = false;
+      _applyFiltersAndSort();
+    });
+    _startTypingAnimation();
   }
 
   Future<String?> getToken() async {
@@ -42,10 +165,6 @@ class _ListPembayaranState extends State<ListPembayaran> {
       final token = await getToken();
       final pasienId = await getPasienId();
 
-      print('🔍 === DEBUG LIST PEMBAYARAN ===');
-      print('🔍 Token: ${token != null ? 'Available' : 'NULL'}');
-      print('🔍 PasienId: $pasienId');
-
       if (token == null) {
         setState(() {
           errorMessage = 'Token tidak ditemukan. Silakan login ulang.';
@@ -62,10 +181,8 @@ class _ListPembayaranState extends State<ListPembayaran> {
         return;
       }
 
-      // Try to fetch from the list endpoint first
-      final listUrl = 'http://10.227.74.71:8000/api/pembayaran/list/$pasienId';
-      print('🔍 Trying list URL: $listUrl');
-
+      // Try list endpoint first
+      final listUrl = 'https://admin.royal-klinik.cloud/api/pembayaran/list/$pasienId';
       final listResponse = await http.get(
         Uri.parse(listUrl),
         headers: {
@@ -75,28 +192,22 @@ class _ListPembayaranState extends State<ListPembayaran> {
         },
       );
 
-      print('📡 fetchListPembayaran - Status: ${listResponse.statusCode}');
-      print('📄 fetchListPembayaran - Body: ${listResponse.body}');
-
       if (!mounted) return;
 
-      // Handle different response scenarios
       if (listResponse.statusCode == 200) {
         final data = jsonDecode(listResponse.body);
         if (data['success'] == true && data['data'] != null) {
           setState(() {
             pembayaranList = _processPembayaranData(data['data']);
+            _applyFiltersAndSort();
             isLoading = false;
           });
-          print('✅ Loaded ${pembayaranList.length} payments from list endpoint');
           return;
         }
       }
 
-      // If list endpoint fails, try single patient endpoint
-      print('🔄 List endpoint failed, trying patient endpoint...');
-      final patientUrl = 'http://10.227.74.71:8000/api/pembayaran/pasien/$pasienId';
-
+      // Fallback to patient endpoint
+      final patientUrl = 'https://admin.royal-klinik.cloud/api/pembayaran/pasien/$pasienId';
       final patientResponse = await http.get(
         Uri.parse(patientUrl),
         headers: {
@@ -105,9 +216,6 @@ class _ListPembayaranState extends State<ListPembayaran> {
           'Accept': 'application/json',
         },
       );
-
-      print('📡 Patient endpoint - Status: ${patientResponse.statusCode}');
-      print('📄 Patient endpoint - Body: ${patientResponse.body}');
 
       if (patientResponse.statusCode == 200) {
         final data = jsonDecode(patientResponse.body);
@@ -118,29 +226,20 @@ class _ListPembayaranState extends State<ListPembayaran> {
             } else {
               pembayaranList = [_processSinglePembayaran(data['data'])];
             }
+            _applyFiltersAndSort();
             isLoading = false;
           });
-          print('✅ Loaded ${pembayaranList.length} payments from patient endpoint');
           return;
         }
       }
 
-      // If both endpoints fail with specific errors
-      if (listResponse.statusCode == 404 || patientResponse.statusCode == 404) {
-        setState(() {
-          pembayaranList = [];
-          isLoading = false;
-        });
-        print('ℹ️ No payment data found for patient');
-      } else {
-        setState(() {
-          errorMessage = 'Gagal memuat data pembayaran. Silakan coba lagi.';
-          isLoading = false;
-        });
-      }
+      setState(() {
+        pembayaranList = [];
+        filteredList = [];
+        isLoading = false;
+      });
 
     } catch (e) {
-      print('❌ fetchListPembayaran Exception: $e');
       if (mounted) {
         setState(() {
           errorMessage = 'Terjadi kesalahan koneksi. Silakan coba lagi.';
@@ -152,7 +251,6 @@ class _ListPembayaranState extends State<ListPembayaran> {
 
   List<Map<String, dynamic>> _processPembayaranData(dynamic data) {
     if (data == null) return [];
-
     if (data is List) {
       return data.map((item) => _processSinglePembayaran(item)).toList();
     } else {
@@ -164,8 +262,6 @@ class _ListPembayaranState extends State<ListPembayaran> {
     if (item == null) return _createEmptyPembayaran();
 
     final Map<String, dynamic> processed = {};
-
-    // Safely extract all fields with null checks
     processed['id'] = item['id'];
     processed['total_tagihan'] = item['total_tagihan'] ?? 0;
     processed['status_pembayaran'] = item['status_pembayaran'] ?? 'Belum Bayar';
@@ -176,39 +272,14 @@ class _ListPembayaranState extends State<ListPembayaran> {
     processed['diagnosis'] = item['diagnosis'];
     processed['metode_pembayaran_nama'] = item['metode_pembayaran_nama'];
 
-    // Handle nested pasien data safely
-    if (item['pasien'] != null && item['pasien'] is Map) {
-      processed['pasien'] = {
-        'nama_pasien': item['pasien']['nama_pasien'] ?? 'Pasien',
-      };
-    } else {
-      processed['pasien'] = {'nama_pasien': 'Pasien'};
-    }
-
-    // Handle nested poli data safely
-    if (item['poli'] != null && item['poli'] is Map) {
-      processed['poli'] = {
-        'nama_poli': item['poli']['nama_poli'] ?? 'Umum',
-      };
-    } else {
-      processed['poli'] = {'nama_poli': 'Umum'};
-    }
-
-    // Handle resep data safely
-    if (item['resep'] != null && item['resep'] is List) {
-      processed['resep'] = List<Map<String, dynamic>>.from(item['resep']);
-    } else {
-      processed['resep'] = [];
-    }
-
-    // Handle layanan data safely
-    if (item['layanan'] != null && item['layanan'] is List) {
-      processed['layanan'] = List<Map<String, dynamic>>.from(item['layanan']);
-    } else {
-      processed['layanan'] = [];
-    }
-
-    // Handle flags
+    processed['pasien'] = {
+      'nama_pasien': item['pasien']?['nama_pasien'] ?? 'Pasien',
+    };
+    processed['poli'] = {
+      'nama_poli': item['poli']?['nama_poli'] ?? 'Umum',
+    };
+    processed['resep'] = item['resep'] ?? [];
+    processed['layanan'] = item['layanan'] ?? [];
     processed['is_emr_missing'] = item['is_emr_missing'] ?? false;
     processed['is_payment_missing'] = item['is_payment_missing'] ?? false;
 
@@ -235,7 +306,90 @@ class _ListPembayaranState extends State<ListPembayaran> {
     };
   }
 
-  // Helper method untuk konversi nilai ke double
+  void _filterData() {
+    setState(() {
+      _applyFiltersAndSort();
+    });
+  }
+
+  void _applyFiltersAndSort() {
+    List<Map<String, dynamic>> filtered = pembayaranList;
+
+    // Apply search filter
+    if (_searchController.text.isNotEmpty) {
+      final query = _searchController.text.toLowerCase();
+      filtered = filtered.where((payment) {
+        final namaPasien = payment['pasien']?['nama_pasien']?.toString().toLowerCase() ?? '';
+        final namaPoli = payment['poli']?['nama_poli']?.toString().toLowerCase() ?? '';
+        final kodeTransaksi = payment['kode_transaksi']?.toString().toLowerCase() ?? '';
+        final diagnosis = payment['diagnosis']?.toString().toLowerCase() ?? '';
+        
+        return namaPasien.contains(query) ||
+               namaPoli.contains(query) ||
+               kodeTransaksi.contains(query) ||
+               diagnosis.contains(query);
+      }).toList();
+    }
+
+    // Apply status filter
+    if (_selectedStatus != 'semua') {
+      filtered = filtered.where((payment) {
+        final status = payment['status_pembayaran']?.toString().toLowerCase() ?? '';
+        return status.contains(_selectedStatus.toLowerCase());
+      }).toList();
+    }
+
+    // Apply sorting
+    switch (_selectedSortBy) {
+      case 'tanggal_desc':
+        filtered.sort((a, b) {
+          final dateA = _parseDate(a['tanggal_kunjungan']);
+          final dateB = _parseDate(b['tanggal_kunjungan']);
+          return dateB.compareTo(dateA);
+        });
+        break;
+      case 'tanggal_asc':
+        filtered.sort((a, b) {
+          final dateA = _parseDate(a['tanggal_kunjungan']);
+          final dateB = _parseDate(b['tanggal_kunjungan']);
+          return dateA.compareTo(dateB);
+        });
+        break;
+      case 'total_desc':
+        filtered.sort((a, b) {
+          final totalA = toDoubleValue(a['total_tagihan']);
+          final totalB = toDoubleValue(b['total_tagihan']);
+          return totalB.compareTo(totalA);
+        });
+        break;
+      case 'total_asc':
+        filtered.sort((a, b) {
+          final totalA = toDoubleValue(a['total_tagihan']);
+          final totalB = toDoubleValue(b['total_tagihan']);
+          return totalA.compareTo(totalB);
+        });
+        break;
+      case 'status':
+        filtered.sort((a, b) {
+          final statusA = a['status_pembayaran'] ?? '';
+          final statusB = b['status_pembayaran'] ?? '';
+          return statusA.compareTo(statusB);
+        });
+        break;
+    }
+
+    filteredList = filtered;
+  }
+
+  DateTime _parseDate(dynamic date) {
+    if (date == null) return DateTime.now();
+    try {
+      return DateTime.parse(date.toString());
+    } catch (e) {
+      return DateTime.now();
+    }
+  }
+
   double toDoubleValue(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;
@@ -249,7 +403,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
   String formatCurrency(double amount) {
     return 'Rp ${amount.toStringAsFixed(0).replaceAllMapped(
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]}.',
+      (Match m) => '${m[1]}.',
     )}';
   }
 
@@ -287,17 +441,394 @@ class _ListPembayaranState extends State<ListPembayaran> {
     }
   }
 
+  void _showFilterDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            child: Container(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.tune, color: Color(0xFF00897B)),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Filter & Urutkan',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedSortBy = 'tanggal_desc';
+                            _selectedStatus = 'semua';
+                            _applyFiltersAndSort();
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Reset'),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Sort by section
+                  const Text(
+                    'Urutkan berdasarkan:',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _buildFilterChip('Tanggal Terbaru', 'tanggal_desc', setModalState),
+                      _buildFilterChip('Tanggal Terlama', 'tanggal_asc', setModalState),
+                      _buildFilterChip('Total Tertinggi', 'total_desc', setModalState),
+                      _buildFilterChip('Total Terendah', 'total_asc', setModalState),
+                      _buildFilterChip('Status', 'status', setModalState),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Filter by status
+                  const Text(
+                    'Filter status:',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _buildStatusChip('Semua', 'semua', setModalState),
+                      _buildStatusChip('Sudah Bayar', 'sudah bayar', setModalState),
+                      _buildStatusChip('Belum Bayar', 'belum bayar', setModalState),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          _applyFiltersAndSort();
+                        });
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00897B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Terapkan Filter'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, String value, StateSetter setModalState) {
+    final isSelected = _selectedSortBy == value;
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        setModalState(() {
+          _selectedSortBy = value;
+        });
+      },
+      selectedColor: const Color(0xFF00897B).withOpacity(0.2),
+      checkmarkColor: const Color(0xFF00897B),
+    );
+  }
+
+  Widget _buildStatusChip(String label, String value, StateSetter setModalState) {
+    final isSelected = _selectedStatus == value;
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        setModalState(() {
+          _selectedStatus = value;
+        });
+      },
+      selectedColor: const Color(0xFF00897B).withOpacity(0.2),
+      checkmarkColor: const Color(0xFF00897B),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text('Riwayat Pembayaran'),
         backgroundColor: const Color(0xFF00897B),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            onPressed: _showFilterDialog,
+            icon: Stack(
+              children: [
+                const Icon(Icons.tune),
+                if (_selectedSortBy != 'tanggal_desc' || _selectedStatus != 'semua')
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
-      body: _buildContent(),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Animated Search bar like artikel page
+            Container(
+              color: Colors.white,
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom > 0 ? 8 : 16,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AnimatedBuilder(
+                    animation: _scaleAnimation,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: _scaleAnimation.value,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isSearchActive ? const Color(0xFF00897B) : Colors.transparent,
+                                    width: isSearchActive ? 2 : 1,
+                                  ),
+                                  boxShadow: isSearchActive
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFF00897B).withOpacity(0.15),
+                                            blurRadius: 10,
+                                            spreadRadius: 1,
+                                          ),
+                                        ]
+                                      : [],
+                                ),
+                                child: TextField(
+                                  controller: _searchController,
+                                  decoration: InputDecoration(
+                                    hintText: _searchController.text.isEmpty && !isSearchActive
+                                        ? _currentText
+                                        : 'Ketik untuk mencari...',
+                                    hintStyle: TextStyle(
+                                      color: _searchController.text.isEmpty && !isSearchActive
+                                          ? const Color(0xFF00897B).withOpacity(0.7)
+                                          : Colors.grey.shade500,
+                                      fontSize: 14,
+                                      fontWeight: _searchController.text.isEmpty && !isSearchActive
+                                          ? FontWeight.w500
+                                          : FontWeight.normal,
+                                    ),
+                                    prefixIcon: AnimatedBuilder(
+                                      animation: _typingTextController,
+                                      builder: (context, _) {
+                                        return AnimatedBuilder(
+                                          animation: _colorAnimation,
+                                          builder: (context, __) {
+                                            return Transform.scale(
+                                              scale: isSearchActive ? 1.0 + (_typingTextController.value * 0.1) : 1.0,
+                                              child: Icon(Icons.search, color: _colorAnimation.value, size: 20),
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    suffixIcon: isSearchActive
+                                        ? AnimatedScale(
+                                            scale: isSearchActive ? 1.0 : 0.0,
+                                            duration: const Duration(milliseconds: 200),
+                                            child: IconButton(
+                                              icon: Container(
+                                                padding: const EdgeInsets.all(4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade300,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Icon(Icons.close, color: Colors.grey.shade700, size: 16),
+                                              ),
+                                              onPressed: clearSearch,
+                                            ),
+                                          )
+                                        : null,
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  ),
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Search result info (animated) - only show when keyboard is not visible
+                  if (isSearchActive && MediaQuery.of(context).viewInsets.bottom == 0) ...[
+                    const SizedBox(height: 12),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      child: AnimatedOpacity(
+                        opacity: isSearchActive ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 300),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF00897B).withOpacity(0.1),
+                                const Color(0xFF4CAF50).withOpacity(0.05),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF00897B).withOpacity(0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              AnimatedBuilder(
+                                animation: _typingTextController,
+                                builder: (context, _) {
+                                  return Transform.rotate(
+                                    angle: _typingTextController.value * 6.28,
+                                    child: const Icon(Icons.search, size: 16, color: Color(0xFF00897B)),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: AnimatedDefaultTextStyle(
+                                  duration: const Duration(milliseconds: 300),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: const Color(0xFF00897B),
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: isTyping ? 0.5 : 0.0,
+                                  ),
+                                  child: Text('Ditemukan ${filteredList.length} pembayaran untuk "${_searchController.text}"'),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: clearSearch,
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(50, 30),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF00897B).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text(
+                                    'Clear',
+                                    style: TextStyle(color: Color(0xFF00897B), fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            
+            // Results count - only show when keyboard is not visible
+            if (!isLoading && pembayaranList.isNotEmpty && MediaQuery.of(context).viewInsets.bottom == 0)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: Colors.white,
+                child: Text(
+                  'Menampilkan ${filteredList.length} dari ${pembayaranList.length} pembayaran',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            
+            // Content
+            Expanded(child: _buildContent()),
+          ],
+        ),
+      ),
     );
   }
 
@@ -407,14 +938,67 @@ class _ListPembayaranState extends State<ListPembayaran> {
       );
     }
 
+    if (filteredList.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.search_off,
+                size: 64,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tidak Ada Hasil',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Coba ubah kata kunci pencarian atau filter.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() {
+                    _selectedSortBy = 'tanggal_desc';
+                    _selectedStatus = 'semua';
+                    _applyFiltersAndSort();
+                  });
+                },
+                icon: const Icon(Icons.clear),
+                label: const Text('Reset Filter'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00897B),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: fetchListPembayaran,
       color: const Color(0xFF00897B),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: pembayaranList.length,
+        itemCount: filteredList.length,
         itemBuilder: (context, index) {
-          final payment = pembayaranList[index];
+          final payment = filteredList[index];
           return _buildPaymentCard(payment, index);
         },
       ),
@@ -422,7 +1006,6 @@ class _ListPembayaranState extends State<ListPembayaran> {
   }
 
   Widget _buildPaymentCard(Map<String, dynamic> payment, int index) {
-    // Safe null checks for all accessed fields
     final namaPasien = payment['pasien']?['nama_pasien'] ?? 'Pasien';
     final namaPoli = payment['poli']?['nama_poli'] ?? 'Umum';
     final status = payment['status_pembayaran'] ?? 'Belum Bayar';
@@ -430,6 +1013,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
     final kodeTransaksi = payment['kode_transaksi'];
     final tanggalKunjungan = payment['tanggal_kunjungan'];
     final noAntrian = payment['no_antrian'];
+    final metodePembayaran = payment['metode_pembayaran_nama'];
     final isEmrMissing = payment['is_emr_missing'] == true;
     final isPaymentMissing = payment['is_payment_missing'] == true;
 
@@ -437,12 +1021,11 @@ class _ListPembayaranState extends State<ListPembayaran> {
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: () async {
-          // Save context for navigation
           final prefs = await SharedPreferences.getInstance();
           if (payment['id'] != null) {
             await prefs.setInt('selected_kunjungan_id', payment['id']);
@@ -462,11 +1045,11 @@ class _ListPembayaranState extends State<ListPembayaran> {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with patient name and status
+              // Header
               Row(
                 children: [
                   Expanded(
@@ -476,16 +1059,28 @@ class _ListPembayaranState extends State<ListPembayaran> {
                         Text(
                           namaPasien,
                           style: const TextStyle(
-                            fontSize: 16,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
                         ),
-                        Text(
-                          namaPoli,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
-                          ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.local_hospital,
+                              size: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              namaPoli,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -493,7 +1088,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
-                      vertical: 6,
+                      vertical: 8,
                     ),
                     decoration: BoxDecoration(
                       color: _getStatusColor(status).withOpacity(0.1),
@@ -510,7 +1105,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
                           size: 16,
                           color: _getStatusColor(status),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         Text(
                           status,
                           style: TextStyle(
@@ -525,93 +1120,150 @@ class _ListPembayaranState extends State<ListPembayaran> {
                 ],
               ),
 
+              const SizedBox(height: 16),
+
+              // Details row - responsive layout
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.calendar_today,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _formatDate(tanggalKunjungan),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.confirmation_number,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'No. ${noAntrian ?? '-'}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
               const SizedBox(height: 12),
 
-              // Payment details
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 16,
-                    color: Colors.grey.shade600,
+              // Payment amount
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00897B).withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF00897B).withOpacity(0.1),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatDate(tanggalKunjungan),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Icon(
-                    Icons.confirmation_number,
-                    size: 16,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'No. ${noAntrian ?? '-'}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-
-              // Total amount
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Total Pembayaran:',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  Text(
-                    formatCurrency(totalTagihan),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF00897B),
-                    ),
-                  ),
-                ],
-              ),
-
-              // Transaction code if available
-              if (kodeTransaksi != null) ...[
-                const SizedBox(height: 8),
-                Row(
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(
-                      Icons.qr_code,
-                      size: 16,
-                      color: Colors.grey.shade600,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Kode: $kodeTransaksi',
+                    const Text(
+                      'Total Pembayaran',
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
                       ),
                     ),
+                    Text(
+                      formatCurrency(totalTagihan),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF00897B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Additional info - responsive layout
+              if (kodeTransaksi != null || metodePembayaran != null) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    if (kodeTransaksi != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.qr_code,
+                            size: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              kodeTransaksi,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                                fontFamily: 'monospace',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (metodePembayaran != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.payment,
+                            size: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              metodePembayaran,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ],
 
               // Special status indicators
               if (isEmrMissing || isPaymentMissing) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isEmrMissing
                         ? Colors.blue.shade50
@@ -629,7 +1281,7 @@ class _ListPembayaranState extends State<ListPembayaran> {
                         isEmrMissing
                             ? Icons.medical_services
                             : Icons.hourglass_empty,
-                        size: 16,
+                        size: 18,
                         color: isEmrMissing
                             ? Colors.blue.shade600
                             : Colors.amber.shade600,
@@ -639,9 +1291,10 @@ class _ListPembayaranState extends State<ListPembayaran> {
                         child: Text(
                           isEmrMissing
                               ? 'Menunggu pemeriksaan dokter'
-                              : 'Sedang diproses',
+                              : 'Sedang diproses oleh admin',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
                             color: isEmrMissing
                                 ? Colors.blue.shade700
                                 : Colors.amber.shade700,

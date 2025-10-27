@@ -60,7 +60,7 @@ class _PembayaranState extends State<Pembayaran> {
               Center(
                 child: InteractiveViewer(
                   child: Image.network(
-                    'http://10.227.74.71:8000/storage/$buktiPembayaran',
+                    'https://admin.royal-klinik.cloud/storage/$buktiPembayaran',
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
@@ -139,7 +139,7 @@ class _PembayaranState extends State<Pembayaran> {
 
       final response = await http.get(
         Uri.parse(
-          'http://10.227.74.71:8000/api/pembayaran/get-data-metode-pembayaran',
+          'https://admin.royal-klinik.cloud/api/pembayaran/get-data-metode-pembayaran',
         ),
         headers: {
           'Authorization': 'Bearer $token',
@@ -218,11 +218,11 @@ class _PembayaranState extends State<Pembayaran> {
 
       if (selectedKunjunganId != null && fromListPayment) {
         url =
-            'http://10.227.74.71:8000/api/pembayaran/detail/$selectedKunjunganId';
+            'https://admin.royal-klinik.cloud/api/pembayaran/detail/$selectedKunjunganId';
         debugInfo = 'Using selectedKunjunganId from SharedPreferences';
       } else if (widget.kunjunganId != null) {
         url =
-            'http://10.227.74.71:8000/api/pembayaran/detail/${widget.kunjunganId}';
+            'https://admin.royal-klinik.cloud/api/pembayaran/detail/${widget.kunjunganId}';
         debugInfo = 'Using kunjunganId from constructor';
       } else {
         if (pasienId == null) {
@@ -233,7 +233,7 @@ class _PembayaranState extends State<Pembayaran> {
           });
           return;
         }
-        url = 'http://10.227.74.71:8000/api/pembayaran/pasien/$pasienId';
+        url = 'https://admin.royal-klinik.cloud/api/pembayaran/pasien/$pasienId';
         debugInfo = 'Using pasienId fallback';
       }
 
@@ -1013,7 +1013,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Image.network(
-                  'http://10.227.74.71:8000/storage/$buktiPembayaran',
+                  'https://admin.royal-klinik.cloud/storage/$buktiPembayaran',
                   width: double.infinity,
                   height: 200,
                   fit: BoxFit.cover,
