@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:RoyalClinic/pasien/Artikel.dart';
 import 'package:RoyalClinic/pasien/Katalog.dart';
 import 'package:RoyalClinic/pasien/ListPembayaran.dart';
+import 'package:RoyalClinic/pasien/PembelianObat.dart';
 import 'package:RoyalClinic/pasien/PesanJadwal.dart';
 import 'package:RoyalClinic/pasien/Testimoni.dart';
 import 'package:RoyalClinic/pasien/edit_profile.dart';
@@ -160,7 +161,7 @@ class _MainWrapperState extends State<MainWrapper> {
 
     try {
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getAllDokter'),
+        Uri.parse('http://10.61.209.71:8000/api/getAllDokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -372,7 +373,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return;
       }
       final res = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+        Uri.parse('http://10.61.209.71:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -430,7 +431,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (!mounted) return;
       final token = prefs.getString('token');
       final res = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getDataTestimoni'),
+        Uri.parse('http://10.61.209.71:8000/api/getDataTestimoni'),
         headers: {if (token != null) 'Authorization': 'Bearer $token'},
       );
       if (!mounted) return;
@@ -643,7 +644,7 @@ class _ProfileCard extends StatelessWidget {
       children: [
         _safeImageSquare(
           url: pasien['foto_pasien'] != null
-              ? 'https://admin.royal-klinik.cloud/storage/${pasien['foto_pasien']}'
+              ? 'http://10.61.209.71:8000/storage/${pasien['foto_pasien']}'
               : null,
           size: 58,
           fallbackIcon: Icons.person,
@@ -1203,7 +1204,7 @@ class _MenuGrid extends StatelessWidget {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 4,
+      crossAxisCount: 3, // Ubah dari 4 ke 3 untuk menampung 5 item dalam 2 baris
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
       childAspectRatio: 0.9,
@@ -1247,6 +1248,17 @@ class _MenuGrid extends StatelessWidget {
           () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const ListPembayaran()),
+          ),
+        ),
+        // TAMBAHAN BARU: Tombol PembelianObat
+        _menuItem(
+          context,
+          'assets/icons/obat.png', // Anda perlu menambahkan icon ini atau gunakan yang sudah ada
+          'Beli Obat',
+          const Color(0xFFFF5722), // Warna orange untuk membedakan
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PembelianObat()),
           ),
         ),
       ],
@@ -1580,7 +1592,7 @@ class _DokterTersediaSection extends StatelessWidget {
                               ),
                             )
                           : Image.network(
-                              'https://admin.royal-klinik.cloud/storage/$foto',
+                              'http://10.61.209.71:8000/storage/$foto',
                               width: 70,
                               height: 70,
                               fit: BoxFit.cover,

@@ -107,7 +107,7 @@ class _ForgotUsernamePageState extends State<ForgotUsernamePage>
 
     try {
       final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/forgot-username/send-otp'),
+        Uri.parse('http://10.61.209.71:8000/api/forgot-username/send-otp'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -184,7 +184,7 @@ class _ForgotUsernamePageState extends State<ForgotUsernamePage>
 
       final resp = await http.post(
         Uri.parse(
-            'https://admin.royal-klinik.cloud/api/forgot-username/verify-or-change'),
+            'http://10.61.209.71:8000/api/forgot-username/verify-or-change'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

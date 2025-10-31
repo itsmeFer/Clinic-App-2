@@ -17,9 +17,17 @@ import 'package:path_provider/path_provider.dart';
 
 class Pembayaran extends StatefulWidget {
   final int? kunjunganId;
+  final String? kodeTransaksi; // TAMBAHKAN untuk medicine payments
+  final String? paymentType; // TAMBAHKAN untuk membedakan tipe
   final bool fromList;
 
-  const Pembayaran({super.key, this.kunjunganId, this.fromList = false});
+  const Pembayaran({
+    super.key,
+    this.kunjunganId,
+    this.kodeTransaksi,
+    this.paymentType = 'medical', // default medical
+    this.fromList = false,
+  });
 
   @override
   State<Pembayaran> createState() => _PembayaranState();
@@ -60,7 +68,7 @@ class _PembayaranState extends State<Pembayaran> {
               Center(
                 child: InteractiveViewer(
                   child: Image.network(
-                    'https://admin.royal-klinik.cloud/storage/$buktiPembayaran',
+                    'http://10.61.209.71:8000/storage/$buktiPembayaran',
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
@@ -139,7 +147,7 @@ class _PembayaranState extends State<Pembayaran> {
 
       final response = await http.get(
         Uri.parse(
-          'https://admin.royal-klinik.cloud/api/pembayaran/get-data-metode-pembayaran',
+          'http://10.61.209.71:8000/api/pembayaran/get-data-metode-pembayaran',
         ),
         headers: {
           'Authorization': 'Bearer $token',
@@ -188,6 +196,7 @@ class _PembayaranState extends State<Pembayaran> {
     print('⚠️ Using default metode pembayaran');
   }
 
+  // MODIFIKASI: Method untuk fetch data pembayaran (support both medical and medicine)
   Future<void> fetchPembayaranData() async {
     try {
       final token = await getToken();
@@ -196,12 +205,13 @@ class _PembayaranState extends State<Pembayaran> {
       final fromListPayment = prefs.getBool('from_list_payment') ?? false;
       final pasienId = await getPasienId();
 
-      // TAMBAHKAN DEBUGGING YANG LEBIH DETAIL
       print('🔍 === DEBUG PEMBAYARAN DATA ===');
       print('🔍 Token: ${token != null ? 'Available' : 'NULL'}');
       print('🔍 selectedKunjunganId: $selectedKunjunganId');
       print('🔍 fromListPayment: $fromListPayment');
       print('🔍 widget.kunjunganId: ${widget.kunjunganId}');
+      print('🔍 widget.kodeTransaksi: ${widget.kodeTransaksi}');
+      print('🔍 widget.paymentType: ${widget.paymentType}');
       print('🔍 pasienId: $pasienId');
 
       if (token == null) {
@@ -213,16 +223,23 @@ class _PembayaranState extends State<Pembayaran> {
         return;
       }
 
+      // TAMBAHKAN: Handle medicine payment
+      if (widget.paymentType == 'medicine' && widget.kodeTransaksi != null) {
+        await _fetchMedicinePaymentData(token, widget.kodeTransaksi!);
+        return;
+      }
+
+      // Existing medical payment logic
       String url;
       String debugInfo;
 
       if (selectedKunjunganId != null && fromListPayment) {
         url =
-            'https://admin.royal-klinik.cloud/api/pembayaran/detail/$selectedKunjunganId';
+            'http://10.61.209.71:8000/api/pembayaran/detail/$selectedKunjunganId';
         debugInfo = 'Using selectedKunjunganId from SharedPreferences';
       } else if (widget.kunjunganId != null) {
         url =
-            'https://admin.royal-klinik.cloud/api/pembayaran/detail/${widget.kunjunganId}';
+            'http://10.61.209.71:8000/api/pembayaran/detail/${widget.kunjunganId}';
         debugInfo = 'Using kunjunganId from constructor';
       } else {
         if (pasienId == null) {
@@ -233,7 +250,7 @@ class _PembayaranState extends State<Pembayaran> {
           });
           return;
         }
-        url = 'https://admin.royal-klinik.cloud/api/pembayaran/pasien/$pasienId';
+        url = 'http://10.61.209.71:8000/api/pembayaran/pasien/$pasienId';
         debugInfo = 'Using pasienId fallback';
       }
 
@@ -254,116 +271,11 @@ class _PembayaranState extends State<Pembayaran> {
 
       if (!mounted) return;
 
-      // Handle HTML response (server error)
-      if (response.body.startsWith('<') || response.body.contains('<script>')) {
-        print('❌ Server returned HTML instead of JSON');
-        setState(() {
-          errorMessage = 'Server error. Silakan coba lagi atau hubungi admin.';
-          isLoading = false;
-        });
-        return;
-      }
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true && data['data'] != null) {
-          setState(() {
-            if (selectedKunjunganId != null && fromListPayment) {
-              pembayaranData = Map<String, dynamic>.from(data['data']);
-            } else if (widget.kunjunganId != null) {
-              pembayaranData = Map<String, dynamic>.from(data['data']);
-            } else {
-              if (data['data']['payments'] != null &&
-                  data['data']['payments'].isNotEmpty) {
-                pembayaranData = Map<String, dynamic>.from(
-                  data['data']['payments'][0],
-                );
-              } else {
-                pembayaranData = Map<String, dynamic>.from(data['data']);
-              }
-            }
-            isLoading = false;
-          });
-
-          print('✅ Data pembayaran berhasil dimuat');
-          print('🔍 Total tagihan: ${pembayaranData?['total_tagihan']}');
-          print('🔍 Status: ${pembayaranData?['status_pembayaran']}');
-          print('🔍 EMR Missing: ${pembayaranData?['is_emr_missing']}');
-          print('🔍 Payment Missing: ${pembayaranData?['is_payment_missing']}');
-          print('🔍 Kode Transaksi: ${pembayaranData?['kode_transaksi']}');
-          print(
-            '🔍 Metode Pembayaran Nama: ${pembayaranData?['metode_pembayaran_nama']}',
-          );
-        } else {
-          print('❌ Response success = false or data is null');
-          setState(() {
-            errorMessage = data['message'] ?? 'Data pembayaran tidak ditemukan';
-            isLoading = false;
-          });
-        }
-      } else if (response.statusCode == 404) {
-        print('❌ Data tidak ditemukan (404)');
-        setState(() {
-          errorMessage = 'Data pembayaran tidak ditemukan untuk pasien ini.';
-          isLoading = false;
-        });
-      } else if (response.statusCode == 401) {
-        print('❌ Unauthorized (401)');
-        setState(() {
-          errorMessage = 'Sesi telah berakhir. Silakan login ulang.';
-          isLoading = false;
-        });
-      } else if (response.statusCode == 400) {
-        try {
-          final data = jsonDecode(response.body);
-          if (data['message']?.toString().toLowerCase().contains(
-                'sudah selesai',
-              ) ==
-              true) {
-            setState(() {
-              pembayaranData = {
-                'status_pembayaran': 'Sudah Bayar',
-                'kode_transaksi': 'COMPLETED',
-                'total_tagihan': 0,
-                'pasien': {'nama_pasien': 'Pasien'},
-                'poli': {'nama_poli': 'Umum'},
-                'tanggal_kunjungan': DateTime.now().toString(),
-                'no_antrian': '-',
-                'diagnosis': 'Pembayaran sudah selesai',
-                'resep': [],
-                'layanan': [],
-              };
-              isLoading = false;
-            });
-          } else {
-            setState(() {
-              errorMessage =
-                  data['message'] ?? 'Pembayaran tidak dapat diproses';
-              isLoading = false;
-            });
-          }
-        } catch (e) {
-          setState(() {
-            errorMessage = 'Terjadi kesalahan: ${response.statusCode}';
-            isLoading = false;
-          });
-        }
-      } else {
-        print('❌ Unexpected status code: ${response.statusCode}');
-        try {
-          final data = jsonDecode(response.body);
-          setState(() {
-            errorMessage =
-                data['message'] ?? 'Terjadi kesalahan: ${response.statusCode}';
-            isLoading = false;
-          });
-        } catch (e) {
-          setState(() {
-            errorMessage = 'Terjadi kesalahan: ${response.statusCode}';
-            isLoading = false;
-          });
-        }
-      }
+      await _processMedicalPaymentResponse(
+        response,
+        selectedKunjunganId,
+        fromListPayment,
+      );
     } catch (e) {
       print('❌ fetchPembayaranData Exception: $e');
       if (mounted) {
@@ -372,6 +284,196 @@ class _PembayaranState extends State<Pembayaran> {
           isLoading = false;
         });
       }
+    }
+  }
+
+  // TAMBAHKAN: Method untuk fetch medicine payment data
+  Future<void> _fetchMedicinePaymentData(
+    String token,
+    String kodeTransaksi,
+  ) async {
+    try {
+      print('🔍 Fetching medicine payment data for: $kodeTransaksi');
+
+      final url =
+          'http://10.61.209.71:8000/api/penjualan-obat/detail/$kodeTransaksi';
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      print('📡 Medicine Payment Response Status: ${response.statusCode}');
+      print('📄 Medicine Payment Response Body: ${response.body}');
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            pembayaranData = _processMedicinePaymentData(data['data']);
+            isLoading = false;
+          });
+
+          print('✅ Medicine payment data berhasil dimuat');
+          print('🔍 Total tagihan: ${pembayaranData?['total_tagihan']}');
+          print('🔍 Status: ${pembayaranData?['status_pembayaran']}');
+          print('🔍 Kode Transaksi: ${pembayaranData?['kode_transaksi']}');
+        } else {
+          setState(() {
+            errorMessage =
+                data['message'] ?? 'Data pembayaran obat tidak ditemukan';
+            isLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          errorMessage = 'Data pembayaran obat tidak ditemukan';
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Error fetching medicine payment: $e');
+      if (mounted) {
+        setState(() {
+          errorMessage =
+              'Terjadi kesalahan saat mengambil data pembayaran obat';
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  // TAMBAHKAN: Process medicine payment data
+  Map<String, dynamic> _processMedicinePaymentData(Map<String, dynamic> data) {
+    return {
+      'id': data['kode_transaksi'],
+      'type': 'medicine',
+      'total_tagihan': data['total_tagihan'] ?? 0,
+      'status_pembayaran': data['status'] ?? 'Belum Bayar',
+      'kode_transaksi': data['kode_transaksi'],
+      'tanggal_pembayaran': data['tanggal_transaksi'],
+      'tanggal_kunjungan': data['tanggal_transaksi'],
+      'no_antrian': null,
+      'diagnosis': 'Pembelian Obat',
+      'metode_pembayaran_nama': data['metode_pembayaran'],
+      'uang_yang_diterima': data['uang_yang_diterima'],
+      'kembalian': data['kembalian'],
+      'pasien': {
+        'nama_pasien': data['pasien']?['nama_pasien'] ?? 'Pembelian Obat',
+      },
+      'poli': {'nama_poli': 'Apotek'},
+      'resep': [], // Medicines akan masuk ke field 'items'
+      'layanan': [],
+      'items': data['items'] ?? [], // Medicine items
+      'total_items': data['total_items'] ?? 0,
+      'is_emr_missing': false,
+      'is_payment_missing': false,
+    };
+  }
+
+  // MODIFIKASI: Process medical payment response
+  Future<void> _processMedicalPaymentResponse(
+    http.Response response,
+    int? selectedKunjunganId,
+    bool fromListPayment,
+  ) async {
+    // Handle HTML response (server error)
+    if (response.body.startsWith('<') || response.body.contains('<script>')) {
+      print('❌ Server returned HTML instead of JSON');
+      setState(() {
+        errorMessage = 'Server error. Silakan coba lagi atau hubungi admin.';
+        isLoading = false;
+      });
+      return;
+    }
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true && data['data'] != null) {
+        setState(() {
+          if (selectedKunjunganId != null && fromListPayment) {
+            pembayaranData = Map<String, dynamic>.from(data['data']);
+            pembayaranData!['type'] = 'medical';
+          } else if (widget.kunjunganId != null) {
+            pembayaranData = Map<String, dynamic>.from(data['data']);
+            pembayaranData!['type'] = 'medical';
+          } else {
+            if (data['data']['payments'] != null &&
+                data['data']['payments'].isNotEmpty) {
+              pembayaranData = Map<String, dynamic>.from(
+                data['data']['payments'][0],
+              );
+              pembayaranData!['type'] = 'medical';
+            } else {
+              pembayaranData = Map<String, dynamic>.from(data['data']);
+              pembayaranData!['type'] = 'medical';
+            }
+          }
+          isLoading = false;
+        });
+
+        print('✅ Medical payment data berhasil dimuat');
+      } else {
+        setState(() {
+          errorMessage = data['message'] ?? 'Data pembayaran tidak ditemukan';
+          isLoading = false;
+        });
+      }
+    } else if (response.statusCode == 404) {
+      setState(() {
+        errorMessage = 'Data pembayaran tidak ditemukan untuk pasien ini.';
+        isLoading = false;
+      });
+    } else if (response.statusCode == 401) {
+      setState(() {
+        errorMessage = 'Sesi telah berakhir. Silakan login ulang.';
+        isLoading = false;
+      });
+    } else if (response.statusCode == 400) {
+      try {
+        final data = jsonDecode(response.body);
+        if (data['message']?.toString().toLowerCase().contains(
+              'sudah selesai',
+            ) ==
+            true) {
+          setState(() {
+            pembayaranData = {
+              'type': 'medical',
+              'status_pembayaran': 'Sudah Bayar',
+              'kode_transaksi': 'COMPLETED',
+              'total_tagihan': 0,
+              'pasien': {'nama_pasien': 'Pasien'},
+              'poli': {'nama_poli': 'Umum'},
+              'tanggal_kunjungan': DateTime.now().toString(),
+              'no_antrian': '-',
+              'diagnosis': 'Pembayaran sudah selesai',
+              'resep': [],
+              'layanan': [],
+            };
+            isLoading = false;
+          });
+        } else {
+          setState(() {
+            errorMessage = data['message'] ?? 'Pembayaran tidak dapat diproses';
+            isLoading = false;
+          });
+        }
+      } catch (e) {
+        setState(() {
+          errorMessage = 'Terjadi kesalahan: ${response.statusCode}';
+          isLoading = false;
+        });
+      }
+    } else {
+      setState(() {
+        errorMessage = 'Terjadi kesalahan: ${response.statusCode}';
+        isLoading = false;
+      });
     }
   }
 
@@ -500,10 +602,11 @@ class _PembayaranState extends State<Pembayaran> {
     }
   }
 
-  // Method untuk generate text yang akan di-share
+  // MODIFIKASI: Method untuk generate text yang akan di-share (support both types)
   String _generateShareText() {
     if (pembayaranData == null) return 'Detail Pembayaran - Royal Clinic';
 
+    final paymentType = pembayaranData!['type'] ?? 'medical';
     final namaPasien = pembayaranData!['pasien']?['nama_pasien'] ?? '-';
     final namaPoli = pembayaranData!['poli']?['nama_poli'] ?? '-';
     final tanggalKunjungan = _formatDate(pembayaranData!['tanggal_kunjungan']);
@@ -516,25 +619,45 @@ class _PembayaranState extends State<Pembayaran> {
     final metodePembayaran =
         pembayaranData!['metode_pembayaran_nama'] ?? 'Belum dipilih';
 
-    return '''
-🏥 ROYAL CLINIC - DETAIL PEMBAYARAN
+    String header = paymentType == 'medicine'
+        ? '🏥 ROYAL CLINIC - DETAIL PEMBELIAN OBAT'
+        : '🏥 ROYAL CLINIC - DETAIL PEMBAYARAN';
+
+    String content =
+        '''
+$header
 
 👤 Pasien: $namaPasien
-🏢 Poli: $namaPoli
-📅 Tanggal: $tanggalKunjungan
-🎫 No. Antrian: $noAntrian
+🏢 ${paymentType == 'medicine' ? 'Apotek' : 'Poli'}: $namaPoli
+📅 Tanggal: $tanggalKunjungan''';
 
-💰 Total Pembayaran: $totalTagihan
+    if (paymentType == 'medical' && noAntrian != '-') {
+      content += '\n🎫 No. Antrian: $noAntrian';
+    }
+
+    if (paymentType == 'medicine' && pembayaranData!['total_items'] != null) {
+      content += '\n📦 Total Item: ${pembayaranData!['total_items']}';
+    }
+
+    content +=
+        '''
+
+💰 Total ${paymentType == 'medicine' ? 'Pembelian' : 'Pembayaran'}: $totalTagihan
 📊 Status: $status
 🔐 Kode Transaksi: $kodeTransaksi
 💳 Metode Pembayaran: $metodePembayaran
 
 Terima kasih telah menggunakan layanan Royal Clinic!
   ''';
+
+    return content;
   }
 
-  // Method untuk build PDF content
+  // MODIFIKASI: Method untuk build PDF content (support both types)
   pw.Widget _buildPDFContent() {
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+    final isMedicine = paymentType == 'medicine';
+
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -555,7 +678,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
               ),
               pw.SizedBox(height: 5),
               pw.Text(
-                'Detail Pembayaran',
+                isMedicine ? 'Detail Pembelian Obat' : 'Detail Pembayaran',
                 style: pw.TextStyle(fontSize: 16, color: PdfColors.white),
               ),
             ],
@@ -564,7 +687,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
 
         pw.SizedBox(height: 20),
 
-        // Patient Info
+        // Patient/Transaction Info
         pw.Container(
           width: double.infinity,
           padding: const pw.EdgeInsets.all(15),
@@ -576,7 +699,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'Informasi Kunjungan',
+                isMedicine ? 'Informasi Transaksi' : 'Informasi Kunjungan',
                 style: pw.TextStyle(
                   fontSize: 16,
                   fontWeight: pw.FontWeight.bold,
@@ -584,23 +707,29 @@ Terima kasih telah menggunakan layanan Royal Clinic!
               ),
               pw.SizedBox(height: 10),
               _buildPDFInfoRow(
-                'Nama Pasien',
+                isMedicine ? 'Pembeli' : 'Nama Pasien',
                 pembayaranData!['pasien']?['nama_pasien'] ?? '-',
               ),
               _buildPDFInfoRow(
-                'Poli',
+                isMedicine ? 'Apotek' : 'Poli',
                 pembayaranData!['poli']?['nama_poli'] ?? '-',
               ),
               _buildPDFInfoRow(
                 'Tanggal',
                 _formatDate(pembayaranData!['tanggal_kunjungan']),
               ),
-              _buildPDFInfoRow(
-                'No. Antrian',
-                pembayaranData!['no_antrian']?.toString() ?? '-',
-              ),
+              if (!isMedicine && pembayaranData!['no_antrian'] != null)
+                _buildPDFInfoRow(
+                  'No. Antrian',
+                  pembayaranData!['no_antrian']?.toString() ?? '-',
+                ),
               if (pembayaranData!['diagnosis'] != null)
                 _buildPDFInfoRow('Diagnosis', pembayaranData!['diagnosis']),
+              if (isMedicine && pembayaranData!['total_items'] != null)
+                _buildPDFInfoRow(
+                  'Total Item',
+                  '${pembayaranData!['total_items']} item',
+                ),
             ],
           ),
         ),
@@ -619,7 +748,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'Rincian Pembayaran',
+                isMedicine ? 'Rincian Pembelian' : 'Rincian Pembayaran',
                 style: pw.TextStyle(
                   fontSize: 16,
                   fontWeight: pw.FontWeight.bold,
@@ -627,8 +756,24 @@ Terima kasih telah menggunakan layanan Royal Clinic!
               ),
               pw.SizedBox(height: 10),
 
-              // Resep
-              if (_hasResep()) ...[
+              // Items (Medicine or Medical)
+              if (isMedicine && _hasMedicineItems()) ...[
+                pw.Text(
+                  'Obat yang dibeli:',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 5),
+                ...((pembayaranData!['items'] as List?) ?? []).map(
+                  (item) => _buildPDFInfoRow(
+                    '  ${item['nama_obat'] ?? 'Obat'}',
+                    '${item['jumlah'] ?? 0}x - ${formatCurrency(toDoubleValue(item['sub_total']))}',
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+              ],
+
+              // Resep (for medical)
+              if (!isMedicine && _hasResep()) ...[
                 pw.Text(
                   'Resep Obat:',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -643,8 +788,8 @@ Terima kasih telah menggunakan layanan Royal Clinic!
                 pw.SizedBox(height: 10),
               ],
 
-              // Layanan
-              if (_hasLayanan()) ...[
+              // Layanan (for medical)
+              if (!isMedicine && _hasLayanan()) ...[
                 pw.Text(
                   'Layanan Medis:',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -667,7 +812,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    'Total Pembayaran:',
+                    isMedicine ? 'Total Pembelian:' : 'Total Pembayaran:',
                     style: pw.TextStyle(
                       fontSize: 16,
                       fontWeight: pw.FontWeight.bold,
@@ -762,7 +907,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Bagikan Detail Pembayaran',
+              'Bagikan Detail ${widget.paymentType == 'medicine' ? 'Pembelian' : 'Pembayaran'}',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -862,6 +1007,11 @@ Terima kasih telah menggunakan layanan Royal Clinic!
 
   bool get canMakePayment {
     if (pembayaranData == null) return false;
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+
+    // Medicine payments tidak bisa dibayar di app, harus ke kasir
+    if (paymentType == 'medicine') return false;
+
     final isEmrMissing = pembayaranData!['is_emr_missing'] == true;
     final isPaymentMissing = pembayaranData!['is_payment_missing'] == true;
 
@@ -883,6 +1033,11 @@ Terima kasih telah menggunakan layanan Royal Clinic!
 
   bool get isDataIncomplete {
     if (pembayaranData == null) return true;
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+
+    // Medicine payments tidak pernah incomplete
+    if (paymentType == 'medicine') return false;
+
     final isEmrMissing = pembayaranData!['is_emr_missing'] == true;
     final isPaymentMissing = pembayaranData!['is_payment_missing'] == true;
     return isEmrMissing || isPaymentMissing;
@@ -1013,7 +1168,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Image.network(
-                  'https://admin.royal-klinik.cloud/storage/$buktiPembayaran',
+                  'http://10.61.209.71:8000/storage/$buktiPembayaran',
                   width: double.infinity,
                   height: 200,
                   fit: BoxFit.cover,
@@ -1251,7 +1406,9 @@ Terima kasih telah menggunakan layanan Royal Clinic!
     if (isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Pembayaran'),
+          title: Text(
+            widget.paymentType == 'medicine' ? 'Pembelian Obat' : 'Pembayaran',
+          ),
           backgroundColor: const Color(0xFF00897B),
           foregroundColor: Colors.white,
         ),
@@ -1271,7 +1428,9 @@ Terima kasih telah menggunakan layanan Royal Clinic!
     if (errorMessage != null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Pembayaran'),
+          title: Text(
+            widget.paymentType == 'medicine' ? 'Pembelian Obat' : 'Pembayaran',
+          ),
           backgroundColor: const Color(0xFF00897B),
           foregroundColor: Colors.white,
         ),
@@ -1337,7 +1496,9 @@ Terima kasih telah menggunakan layanan Royal Clinic!
     if (pembayaranData == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Pembayaran'),
+          title: Text(
+            widget.paymentType == 'medicine' ? 'Pembelian Obat' : 'Pembayaran',
+          ),
           backgroundColor: const Color(0xFF00897B),
           foregroundColor: Colors.white,
         ),
@@ -1345,10 +1506,13 @@ Terima kasih telah menggunakan layanan Royal Clinic!
       );
     }
 
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+    final isMedicine = paymentType == 'medicine';
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text('Detail Pembayaran'),
+        title: Text(isMedicine ? 'Detail Pembelian Obat' : 'Detail Pembayaran'),
         backgroundColor: const Color(0xFF00897B),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -1362,48 +1526,66 @@ Terima kasih telah menggunakan layanan Royal Clinic!
             ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Status Pembayaran
-                  _buildStatusCard(),
-                  const SizedBox(height: 16),
+      body: RepaintBoundary(
+        key: _screenshotKey,
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Status Pembayaran
+                    _buildStatusCard(),
+                    const SizedBox(height: 16),
 
-                  // Informasi Pasien & Kunjungan
-                  _buildPatientInfoCard(),
-                  const SizedBox(height: 16),
+                    // Informasi Pasien & Kunjungan
+                    _buildPatientInfoCard(),
+                    const SizedBox(height: 16),
 
-                  // TAMBAHKAN: Bukti Pembayaran Section (hanya tampil jika sudah bayar)
-                  _buildPaymentProofSection(),
-                  if (isPaid) const SizedBox(height: 16),
+                    // TAMBAHKAN: Bukti Pembayaran Section (hanya tampil jika sudah bayar)
+                    _buildPaymentProofSection(),
+                    if (isPaid) const SizedBox(height: 16),
 
-                  // Resep (jika ada dan data lengkap)
-                  if (_hasResep() && !isDataIncomplete) _buildResepCard(),
+                    // MODIFIKASI: Show items based on payment type
+                    if (isMedicine) ...[
+                      // Medicine items
+                      if (_hasMedicineItems() && !isDataIncomplete)
+                        _buildMedicineItemsCard(),
+                    ] else ...[
+                      // Medical items (resep & layanan)
+                      if (_hasResep() && !isDataIncomplete) _buildResepCard(),
+                      if (_hasLayanan() && !isDataIncomplete)
+                        _buildLayananCard(),
+                    ],
 
-                  // Layanan (jika ada dan data lengkap)
-                  if (_hasLayanan() && !isDataIncomplete) _buildLayananCard(),
+                    if (!isDataIncomplete) const SizedBox(height: 16),
 
-                  if (!isDataIncomplete) const SizedBox(height: 16),
+                    // Rincian Pembayaran (hanya jika data lengkap)
+                    if (!isDataIncomplete) _buildPaymentSummaryCard(),
 
-                  // Rincian Pembayaran (hanya jika data lengkap)
-                  if (!isDataIncomplete) _buildPaymentSummaryCard(),
-
-                  const SizedBox(height: 100), // Space for bottom button
-                ],
+                    const SizedBox(height: 100), // Space for bottom button
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Bottom Payment Actions
-          if (!isPaid) _buildBottomPaymentButton() else _buildAlreadyPaidInfo(),
-        ],
+            // Bottom Payment Actions
+            if (!isPaid)
+              _buildBottomPaymentButton()
+            else
+              _buildAlreadyPaidInfo(),
+          ],
+        ),
       ),
     );
+  }
+
+  // TAMBAHKAN: Helper methods untuk check medicine items
+  bool _hasMedicineItems() {
+    final items = pembayaranData?['items'];
+    return items != null && items is List && items.isNotEmpty;
   }
 
   bool _hasResep() {
@@ -1416,7 +1598,107 @@ Terima kasih telah menggunakan layanan Royal Clinic!
     return layanan != null && layanan is List && layanan.isNotEmpty;
   }
 
+  // TAMBAHKAN: Build medicine items card
+  Widget _buildMedicineItemsCard() {
+    final itemsList = pembayaranData!['items'] as List? ?? [];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.medication,
+                  color: Colors.blue,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Obat yang Dibeli',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          ...itemsList
+              .map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['nama_obat'] ?? 'Obat',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            if (item['dosis'] != null)
+                              Text(
+                                'Dosis: ${item['dosis']}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${item['jumlah'] ?? 0}x',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        formatCurrency(toDoubleValue(item['sub_total'])),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusCard() {
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+    final isMedicine = paymentType == 'medicine';
     final status = pembayaranData!['status_pembayaran'] ?? 'Belum Bayar';
     final isEmrMissing = pembayaranData!['is_emr_missing'] == true;
     final isPaymentMissing = pembayaranData!['is_payment_missing'] == true;
@@ -1432,14 +1714,14 @@ Terima kasih telah menggunakan layanan Royal Clinic!
     String statusText;
     String? subtitleText;
 
-    if (isEmrMissing) {
+    if (!isMedicine && isEmrMissing) {
       cardColor = Colors.blue.shade50;
       iconColor = Colors.blue.shade600;
       textColor = Colors.blue.shade700;
       icon = Icons.medical_services;
       statusText = 'Menunggu Pemeriksaan Dokter';
       subtitleText = 'Silakan tunggu hingga pemeriksaan selesai';
-    } else if (isPaymentMissing) {
+    } else if (!isMedicine && isPaymentMissing) {
       cardColor = Colors.amber.shade50;
       iconColor = Colors.amber.shade600;
       textColor = Colors.amber.shade700;
@@ -1451,13 +1733,13 @@ Terima kasih telah menggunakan layanan Royal Clinic!
       iconColor = Colors.green.shade600;
       textColor = Colors.green.shade700;
       icon = Icons.check_circle;
-      statusText = 'Pembayaran Selesai';
+      statusText = isMedicine ? 'Pembelian Selesai' : 'Pembayaran Selesai';
     } else {
       cardColor = Colors.orange.shade50;
       iconColor = Colors.orange.shade600;
       textColor = Colors.orange.shade700;
       icon = Icons.schedule;
-      statusText = 'Menunggu Pembayaran';
+      statusText = isMedicine ? 'Menunggu Pembayaran' : 'Menunggu Pembayaran';
     }
 
     return Container(
@@ -1508,6 +1790,9 @@ Terima kasih telah menggunakan layanan Royal Clinic!
   }
 
   Widget _buildPatientInfoCard() {
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+    final isMedicine = paymentType == 'medicine';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -1533,37 +1818,53 @@ Terima kasih telah menggunakan layanan Royal Clinic!
                   color: const Color(0xFF00897B).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.person,
-                  color: Color(0xFF00897B),
+                child: Icon(
+                  isMedicine
+                      ? Icons.shopping_cart
+                      : Icons.person, // ✅ isMedicine
+                  color: const Color(0xFF00897B),
                   size: 20,
                 ),
               ),
               const SizedBox(width: 12),
-              const Text(
-                'Informasi Kunjungan',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              Text(
+                isMedicine ? 'Informasi Transaksi' : 'Informasi Kunjungan',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
 
           _buildInfoRow(
-            'Nama Pasien',
+            isMedicine ? 'Pembeli' : 'Nama Pasien',
             pembayaranData!['pasien']?['nama_pasien'] ?? '-',
           ),
-          _buildInfoRow('Poli', pembayaranData!['poli']?['nama_poli'] ?? '-'),
+          _buildInfoRow(
+            isMedicine ? 'Apotek' : 'Poli',
+            pembayaranData!['poli']?['nama_poli'] ?? '-',
+          ),
           _buildInfoRow(
             'Tanggal',
             _formatDate(pembayaranData!['tanggal_kunjungan']),
           ),
-          _buildInfoRow(
-            'No. Antrian',
-            pembayaranData!['no_antrian']?.toString() ?? '-',
-          ),
+
+          if (!isMedicine && pembayaranData!['no_antrian'] != null)
+            _buildInfoRow(
+              'No. Antrian',
+              pembayaranData!['no_antrian']?.toString() ?? '-',
+            ),
 
           if (pembayaranData!['diagnosis'] != null)
             _buildInfoRow('Diagnosis', pembayaranData!['diagnosis']),
+
+          if (isMedicine && pembayaranData!['total_items'] != null)
+            _buildInfoRow(
+              'Total Item',
+              '${pembayaranData!['total_items']} item',
+            ),
         ],
       ),
     );
@@ -1736,9 +2037,9 @@ Terima kasih telah menggunakan layanan Royal Clinic!
   }
 
   Widget _buildPaymentSummaryCard() {
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+    final isMedicine = paymentType == 'medicine';
     final totalTagihan = toDoubleValue(pembayaranData!['total_tagihan']);
-    final resepList = pembayaranData!['resep'] as List? ?? [];
-    final layananList = pembayaranData!['layanan'] as List? ?? [];
     final metodePembayaran = pembayaranData!['metode_pembayaran_nama'];
     final tanggalPembayaran = pembayaranData!['tanggal_pembayaran'];
     final isPaid =
@@ -1747,17 +2048,28 @@ Terima kasih telah menggunakan layanan Royal Clinic!
 
     double totalObat = 0;
     double totalLayanan = 0;
+    double totalMedicine = 0;
 
-    // Calculate total obat
-    for (var resep in resepList) {
-      final harga = toDoubleValue(resep['obat']?['harga_obat']);
-      final jumlah = toDoubleValue(resep['jumlah']);
-      totalObat += (harga * jumlah);
-    }
+    if (isMedicine) {
+      // Calculate total for medicine items
+      final itemsList = pembayaranData!['items'] as List? ?? [];
+      for (var item in itemsList) {
+        totalMedicine += toDoubleValue(item['sub_total']);
+      }
+    } else {
+      // Calculate total for medical (existing logic)
+      final resepList = pembayaranData!['resep'] as List? ?? [];
+      final layananList = pembayaranData!['layanan'] as List? ?? [];
 
-    // Calculate total layanan
-    for (var layanan in layananList) {
-      totalLayanan += toDoubleValue(layanan['harga_layanan']);
+      for (var resep in resepList) {
+        final harga = toDoubleValue(resep['obat']?['harga_obat']);
+        final jumlah = toDoubleValue(resep['jumlah']);
+        totalObat += (harga * jumlah);
+      }
+
+      for (var layanan in layananList) {
+        totalLayanan += toDoubleValue(layanan['harga_layanan']);
+      }
     }
 
     return Container(
@@ -1792,25 +2104,33 @@ Terima kasih telah menggunakan layanan Royal Clinic!
                 ),
               ),
               const SizedBox(width: 12),
-              const Text(
-                'Rincian Pembayaran',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              Text(
+                isMedicine ? 'Rincian Pembelian' : 'Rincian Pembayaran',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
 
           // Rincian biaya
-          if (totalLayanan > 0)
-            _buildSummaryRow('Total Layanan', formatCurrency(totalLayanan)),
+          if (isMedicine && totalMedicine > 0)
+            _buildSummaryRow('Total Obat', formatCurrency(totalMedicine))
+          else if (!isMedicine) ...[
+            if (totalLayanan > 0)
+              _buildSummaryRow('Total Layanan', formatCurrency(totalLayanan)),
+            if (totalObat > 0)
+              _buildSummaryRow('Total Obat', formatCurrency(totalObat)),
+          ],
 
-          if (totalObat > 0)
-            _buildSummaryRow('Total Obat', formatCurrency(totalObat)),
-
-          if (totalLayanan > 0 || totalObat > 0) const Divider(height: 24),
+          if ((isMedicine && totalMedicine > 0) ||
+              (!isMedicine && (totalLayanan > 0 || totalObat > 0)))
+            const Divider(height: 24),
 
           _buildSummaryRow(
-            'Total Pembayaran',
+            isMedicine ? 'Total Pembelian' : 'Total Pembayaran',
             formatCurrency(totalTagihan),
             isTotal: true,
           ),
@@ -1939,7 +2259,9 @@ Terima kasih telah menggunakan layanan Royal Clinic!
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Metode pembayaran akan dipilih oleh kasir saat pembayaran',
+                      isMedicine
+                          ? 'Silakan menuju kasir untuk pembayaran obat'
+                          : 'Metode pembayaran akan dipilih oleh kasir saat pembayaran',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.blue.shade700,
@@ -1958,10 +2280,43 @@ Terima kasih telah menggunakan layanan Royal Clinic!
   Widget _buildBottomPaymentButton() {
     if (pembayaranData == null) return const SizedBox.shrink();
 
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+    final isMedicine = paymentType == 'medicine';
     final isEmrMissing = pembayaranData!['is_emr_missing'] == true;
     final isPaymentMissing = pembayaranData!['is_payment_missing'] == true;
 
-    // ✅ Jika EMR atau payment missing, tampilkan info saja
+    // Medicine payments - always show "go to cashier" message
+    if (isMedicine) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          border: Border(top: BorderSide(color: Colors.blue.shade200)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Icons.info, color: Colors.blue.shade600, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Untuk pembayaran obat, silakan menuju kasir dengan membawa kode transaksi ini.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Medical payments - existing logic
     if (isEmrMissing || isPaymentMissing) {
       Color bgColor = isEmrMissing ? Colors.blue.shade50 : Colors.amber.shade50;
       Color borderColor = isEmrMissing
@@ -2112,6 +2467,9 @@ Terima kasih telah menggunakan layanan Royal Clinic!
   }
 
   Widget _buildAlreadyPaidInfo() {
+    final paymentType = pembayaranData!['type'] ?? 'medical';
+    final isMedicine = paymentType == 'medicine';
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.green.shade50,
@@ -2126,7 +2484,9 @@ Terima kasih telah menggunakan layanan Royal Clinic!
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Pembayaran selesai. Silakan ambil obat di apoteker.',
+                  isMedicine
+                      ? 'Pembelian obat selesai. Terima kasih!'
+                      : 'Pembayaran selesai. Silakan ambil obat di apoteker.',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.green.shade700,

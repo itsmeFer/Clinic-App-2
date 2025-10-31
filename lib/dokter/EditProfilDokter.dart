@@ -120,7 +120,7 @@ class _EditProfileDokterState extends State<EditProfileDokter>
       final token = await getToken();
       
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getDataSpesialisasiDokter'),
+        Uri.parse('http://10.61.209.71:8000/api/getDataSpesialisasiDokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -149,7 +149,7 @@ class _EditProfileDokterState extends State<EditProfileDokter>
   Future<void> _loadSpesialisListAlternative() async {
     try {
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getDataSpesialisasiDokter'),
+        Uri.parse('http://10.61.209.71:8000/api/getDataSpesialisasiDokter'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -346,7 +346,7 @@ class _EditProfileDokterState extends State<EditProfileDokter>
       
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('https://admin.royal-klinik.cloud/api/dokter/update-profile'),
+        Uri.parse('http://10.61.209.71:8000/api/dokter/update-profile'),
       );
 
       request.headers.addAll({
@@ -556,7 +556,7 @@ class _EditProfileDokterState extends State<EditProfileDokter>
                           ? FileImage(_imageFile!)
                           : (widget.dokterData['foto_dokter'] != null
                               ? NetworkImage(
-                                  'https://admin.royal-klinik.cloud/storage/${widget.dokterData['foto_dokter']}',
+                                  'http://10.61.209.71:8000/storage/${widget.dokterData['foto_dokter']}',
                                 )
                               : null),
                       child: (_imageFile == null && widget.dokterData['foto_dokter'] == null)

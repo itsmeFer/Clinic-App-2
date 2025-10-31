@@ -105,7 +105,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     try {
       final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/login'),
+        Uri.parse('http://10.61.209.71:8000/api/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -135,7 +135,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         if (role == 'pasien') {
           try {
             final profileResponse = await http.get(
-              Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+              Uri.parse('http://10.61.209.71:8000/api/pasien/profile'),
               headers: {
                 'Authorization': 'Bearer $token',
                 'Content-Type': 'application/json',
@@ -153,7 +153,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         }
 
         _showSuccessSnackBar('Selamat datang, ${user['username']}!');
-
+        if (role == 'dokter') {
+          // simpan juga sebagai token khusus dokter
+          await prefs.setString('dokter_token', token);
+          // sanity check: pastikan token valid untuk route dokter
+          final meRes = await http.get(
+            Uri.parse('http://10.61.209.71:8000/api/dokter/get-data-dokter'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          );
+          if (meRes.statusCode != 200) {
+            // fallback: gunakan endpoint login-dokter untuk dapat token yang “benar”
+            await _loginAsDokter(username, password);
+            return; // _loginAsDokter akan navigate sendiri
+          }
+        }
         if (!mounted) return;
         if (role == 'dokter') {
           // Kalau ingin verifikasi lagi via endpoint khusus dokter, panggil _loginAsDokter:
@@ -225,7 +241,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _loginAsDokter(String username, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/login-dokter'),
+        Uri.parse('http://10.61.209.71:8000/api/login-dokter'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -240,10 +256,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
       if (response.statusCode == 200 && data['success'] == true) {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', data['data']['token']);
+        final dokterToken = data['data']['token'];
+
+        await prefs.setString('token', dokterToken); // optional (biar seragam)
+        await prefs.setString(
+          'dokter_token',
+          dokterToken,
+        ); // >>> penting untuk area dokter
         await prefs.setString('username', data['data']['user']['username']);
         await prefs.setString('role', data['data']['user']['role']);
         await prefs.setInt('user_id', data['data']['user']['id']);
+
+        // ... lanjut snackbar & navigate
 
         _showSuccessSnackBar(
           'Selamat datang, Dr. ${data['data']['user']['username']}!',
@@ -301,7 +325,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       await prefs.setInt('user_id', data['data']['user']['id']);
 
       final profileResponse = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+        Uri.parse('http://10.61.209.71:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer ${data['data']['token']}',
           'Content-Type': 'application/json',

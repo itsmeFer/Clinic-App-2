@@ -16,12 +16,14 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
   bool isLoading = true;
   String? errorMessage;
   List<Map<String, dynamic>> pembayaranList = [];
+  List<Map<String, dynamic>> pembayaranObatList = []; // TAMBAHKAN untuk obat
   List<Map<String, dynamic>> filteredList = [];
   
   // Search and filter controllers
   final TextEditingController _searchController = TextEditingController();
   String _selectedSortBy = 'tanggal_desc';
   String _selectedStatus = 'semua';
+  String _selectedType = 'semua'; // TAMBAHKAN filter tipe
   
   // Animated search like artikel page
   bool isSearchActive = false;
@@ -155,6 +157,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
     return prefs.getInt('pasien_id');
   }
 
+  // MODIFIKASI: Fetch both medical and medicine payments
   Future<void> fetchListPembayaran() async {
     try {
       setState(() {
@@ -181,8 +184,115 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
         return;
       }
 
+      // Fetch medical payments (existing code)
+      await _fetchMedicalPayments(token, pasienId);
+      
+      // TAMBAHKAN: Fetch medicine payments
+      await _fetchMedicinePayments(token, pasienId);
+
+      setState(() {
+        _combineAndSortPayments();
+        isLoading = false;
+      });
+
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          errorMessage = 'Terjadi kesalahan koneksi. Silakan coba lagi.';
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  // TAMBAHKAN: Method untuk fetch pembayaran obat
+  Future<void> _fetchMedicinePayments(String token, int pasienId) async {
+    try {
+      final url = 'http://10.61.209.71:8000/api/penjualan-obat/riwayat/$pasienId';
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      print('📊 Medicine payments response: ${response.statusCode}');
+      print('📄 Medicine payments body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          List<dynamic> medicineData = data['data'];
+          pembayaranObatList = medicineData.map((item) => _processMedicinePayment(item)).toList();
+          print('✅ Loaded ${pembayaranObatList.length} medicine payments');
+        }
+      }
+    } catch (e) {
+      print('❌ Error fetching medicine payments: $e');
+    }
+  }
+
+  // TAMBAHKAN: Process medicine payment data
+  Map<String, dynamic> _processMedicinePayment(dynamic item) {
+    if (item == null) return _createEmptyMedicinePayment();
+
+    return {
+      'id': item['kode_transaksi'],
+      'type': 'medicine', // TAMBAHKAN identifier
+      'total_tagihan': item['total_tagihan'] ?? 0,
+      'status_pembayaran': item['status'] ?? 'Belum Bayar',
+      'kode_transaksi': item['kode_transaksi'],
+      'tanggal_pembayaran': item['tanggal_transaksi'],
+      'tanggal_kunjungan': item['tanggal_transaksi'], // Use same date
+      'no_antrian': null,
+      'diagnosis': 'Pembelian Obat',
+      'metode_pembayaran_nama': item['metode_pembayaran'],
+      'pasien': {
+        'nama_pasien': 'Pembelian Obat',
+      },
+      'poli': {
+        'nama_poli': 'Apotek',
+      },
+      'resep': item['items'] ?? [],
+      'layanan': [],
+      'items': item['items'] ?? [], // Medicine items
+      'total_items': item['total_items'] ?? 0,
+      'is_emr_missing': false,
+      'is_payment_missing': false,
+      'uang_yang_diterima': item['uang_yang_diterima'],
+      'kembalian': item['kembalian'],
+    };
+  }
+
+  Map<String, dynamic> _createEmptyMedicinePayment() {
+    return {
+      'id': null,
+      'type': 'medicine',
+      'total_tagihan': 0,
+      'status_pembayaran': 'Belum Bayar',
+      'kode_transaksi': null,
+      'tanggal_pembayaran': null,
+      'tanggal_kunjungan': DateTime.now().toString(),
+      'no_antrian': null,
+      'diagnosis': 'Pembelian Obat',
+      'metode_pembayaran_nama': null,
+      'pasien': {'nama_pasien': 'Pembelian Obat'},
+      'poli': {'nama_poli': 'Apotek'},
+      'resep': [],
+      'layanan': [],
+      'items': [],
+      'is_emr_missing': false,
+      'is_payment_missing': false,
+    };
+  }
+
+  // MODIFIKASI: Existing method untuk medical payments
+  Future<void> _fetchMedicalPayments(String token, int pasienId) async {
+    try {
       // Try list endpoint first
-      final listUrl = 'https://admin.royal-klinik.cloud/api/pembayaran/list/$pasienId';
+      final listUrl = 'http://10.61.209.71:8000/api/pembayaran/list/$pasienId';
       final listResponse = await http.get(
         Uri.parse(listUrl),
         headers: {
@@ -197,17 +307,13 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
       if (listResponse.statusCode == 200) {
         final data = jsonDecode(listResponse.body);
         if (data['success'] == true && data['data'] != null) {
-          setState(() {
-            pembayaranList = _processPembayaranData(data['data']);
-            _applyFiltersAndSort();
-            isLoading = false;
-          });
+          pembayaranList = _processPembayaranData(data['data']);
           return;
         }
       }
 
       // Fallback to patient endpoint
-      final patientUrl = 'https://admin.royal-klinik.cloud/api/pembayaran/pasien/$pasienId';
+      final patientUrl = 'http://10.61.209.71:8000/api/pembayaran/pasien/$pasienId';
       final patientResponse = await http.get(
         Uri.parse(patientUrl),
         headers: {
@@ -220,33 +326,45 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
       if (patientResponse.statusCode == 200) {
         final data = jsonDecode(patientResponse.body);
         if (data['success'] == true && data['data'] != null) {
-          setState(() {
-            if (data['data']['payments'] != null) {
-              pembayaranList = _processPembayaranData(data['data']['payments']);
-            } else {
-              pembayaranList = [_processSinglePembayaran(data['data'])];
-            }
-            _applyFiltersAndSort();
-            isLoading = false;
-          });
+          if (data['data']['payments'] != null) {
+            pembayaranList = _processPembayaranData(data['data']['payments']);
+          } else {
+            pembayaranList = [_processSinglePembayaran(data['data'])];
+          }
           return;
         }
       }
 
-      setState(() {
-        pembayaranList = [];
-        filteredList = [];
-        isLoading = false;
-      });
-
+      pembayaranList = [];
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          errorMessage = 'Terjadi kesalahan koneksi. Silakan coba lagi.';
-          isLoading = false;
-        });
-      }
+      print('❌ Error fetching medical payments: $e');
+      pembayaranList = [];
     }
+  }
+
+  // TAMBAHKAN: Combine and sort all payments
+  void _combineAndSortPayments() {
+    List<Map<String, dynamic>> allPayments = [];
+    
+    // Add medical payments with type identifier
+    for (var payment in pembayaranList) {
+      payment['type'] = 'medical';
+      allPayments.add(payment);
+    }
+    
+    // Add medicine payments
+    allPayments.addAll(pembayaranObatList);
+    
+    // Sort by date (newest first)
+    allPayments.sort((a, b) {
+      final dateA = _parseDate(a['tanggal_kunjungan']);
+      final dateB = _parseDate(b['tanggal_kunjungan']);
+      return dateB.compareTo(dateA);
+    });
+    
+    // Set as filtered list for display
+    filteredList = allPayments;
+    _applyFiltersAndSort();
   }
 
   List<Map<String, dynamic>> _processPembayaranData(dynamic data) {
@@ -263,6 +381,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
 
     final Map<String, dynamic> processed = {};
     processed['id'] = item['id'];
+    processed['type'] = 'medical'; // Set type
     processed['total_tagihan'] = item['total_tagihan'] ?? 0;
     processed['status_pembayaran'] = item['status_pembayaran'] ?? 'Belum Bayar';
     processed['kode_transaksi'] = item['kode_transaksi'];
@@ -289,6 +408,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
   Map<String, dynamic> _createEmptyPembayaran() {
     return {
       'id': null,
+      'type': 'medical',
       'total_tagihan': 0,
       'status_pembayaran': 'Belum Bayar',
       'kode_transaksi': null,
@@ -312,8 +432,13 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
     });
   }
 
+  // MODIFIKASI: Update filter to include type and medicine-specific fields
   void _applyFiltersAndSort() {
-    List<Map<String, dynamic>> filtered = pembayaranList;
+    List<Map<String, dynamic>> allPayments = [];
+    allPayments.addAll(pembayaranList.map((p) => {...p, 'type': 'medical'}));
+    allPayments.addAll(pembayaranObatList);
+
+    List<Map<String, dynamic>> filtered = allPayments;
 
     // Apply search filter
     if (_searchController.text.isNotEmpty) {
@@ -324,10 +449,19 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
         final kodeTransaksi = payment['kode_transaksi']?.toString().toLowerCase() ?? '';
         final diagnosis = payment['diagnosis']?.toString().toLowerCase() ?? '';
         
+        // TAMBAHKAN: Search in medicine items
+        String medicineNames = '';
+        if (payment['items'] != null) {
+          for (var item in payment['items']) {
+            medicineNames += (item['nama_obat']?.toString().toLowerCase() ?? '') + ' ';
+          }
+        }
+        
         return namaPasien.contains(query) ||
                namaPoli.contains(query) ||
                kodeTransaksi.contains(query) ||
-               diagnosis.contains(query);
+               diagnosis.contains(query) ||
+               medicineNames.contains(query);
       }).toList();
     }
 
@@ -336,6 +470,14 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
       filtered = filtered.where((payment) {
         final status = payment['status_pembayaran']?.toString().toLowerCase() ?? '';
         return status.contains(_selectedStatus.toLowerCase());
+      }).toList();
+    }
+
+    // TAMBAHKAN: Apply type filter
+    if (_selectedType != 'semua') {
+      filtered = filtered.where((payment) {
+        final type = payment['type']?.toString() ?? '';
+        return type == _selectedType;
       }).toList();
     }
 
@@ -441,6 +583,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
     }
   }
 
+  // MODIFIKASI: Update filter dialog to include type filter
   void _showFilterDialog() {
     showModalBottomSheet(
       context: context,
@@ -483,12 +626,35 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
                           setState(() {
                             _selectedSortBy = 'tanggal_desc';
                             _selectedStatus = 'semua';
+                            _selectedType = 'semua'; // TAMBAHKAN reset
                             _applyFiltersAndSort();
                           });
                           Navigator.pop(context);
                         },
                         child: const Text('Reset'),
                       ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+
+                  // TAMBAHKAN: Type filter section
+                  const Text(
+                    'Jenis pembayaran:',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _buildTypeChip('Semua', 'semua', setModalState),
+                      _buildTypeChip('Kunjungan Medis', 'medical', setModalState),
+                      _buildTypeChip('Pembelian Obat', 'medicine', setModalState),
                     ],
                   ),
                   
@@ -569,6 +735,22 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
     );
   }
 
+  // TAMBAHKAN: Type filter chip
+  Widget _buildTypeChip(String label, String value, StateSetter setModalState) {
+    final isSelected = _selectedType == value;
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        setModalState(() {
+          _selectedType = value;
+        });
+      },
+      selectedColor: const Color(0xFF00897B).withOpacity(0.2),
+      checkmarkColor: const Color(0xFF00897B),
+    );
+  }
+
   Widget _buildFilterChip(String label, String value, StateSetter setModalState) {
     final isSelected = _selectedSortBy == value;
     return FilterChip(
@@ -615,7 +797,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
             icon: Stack(
               children: [
                 const Icon(Icons.tune),
-                if (_selectedSortBy != 'tanggal_desc' || _selectedStatus != 'semua')
+                if (_selectedSortBy != 'tanggal_desc' || _selectedStatus != 'semua' || _selectedType != 'semua')
                   Positioned(
                     right: 0,
                     top: 0,
@@ -810,13 +992,13 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
             ),
             
             // Results count - only show when keyboard is not visible
-            if (!isLoading && pembayaranList.isNotEmpty && MediaQuery.of(context).viewInsets.bottom == 0)
+            if (!isLoading && (pembayaranList.isNotEmpty || pembayaranObatList.isNotEmpty) && MediaQuery.of(context).viewInsets.bottom == 0)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 color: Colors.white,
                 child: Text(
-                  'Menampilkan ${filteredList.length} dari ${pembayaranList.length} pembayaran',
+                  'Menampilkan ${filteredList.length} dari ${pembayaranList.length + pembayaranObatList.length} pembayaran',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade600,
@@ -892,7 +1074,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
       );
     }
 
-    if (pembayaranList.isEmpty) {
+    if (pembayaranList.isEmpty && pembayaranObatList.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -915,7 +1097,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
               ),
               const SizedBox(height: 8),
               Text(
-                'Riwayat pembayaran akan muncul setelah Anda melakukan kunjungan.',
+                'Riwayat pembayaran akan muncul setelah Anda melakukan kunjungan atau pembelian obat.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -975,6 +1157,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
                   setState(() {
                     _selectedSortBy = 'tanggal_desc';
                     _selectedStatus = 'semua';
+                    _selectedType = 'semua';
                     _applyFiltersAndSort();
                   });
                 },
@@ -1005,7 +1188,9 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
     );
   }
 
+  // MODIFIKASI: Update payment card to handle both types
   Widget _buildPaymentCard(Map<String, dynamic> payment, int index) {
+    final paymentType = payment['type'] ?? 'medical';
     final namaPasien = payment['pasien']?['nama_pasien'] ?? 'Pasien';
     final namaPoli = payment['poli']?['nama_poli'] ?? 'Umum';
     final status = payment['status_pembayaran'] ?? 'Belum Bayar';
@@ -1027,31 +1212,74 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
         borderRadius: BorderRadius.circular(16),
         onTap: () async {
           final prefs = await SharedPreferences.getInstance();
-          if (payment['id'] != null) {
-            await prefs.setInt('selected_kunjungan_id', payment['id']);
-            await prefs.setBool('from_list_payment', true);
-          }
+          
+          // Handle different navigation based on payment type
+          if (paymentType == 'medicine') {
+            // For medicine payments, show detail in a dialog or navigate to medicine detail page
+            _showMedicinePaymentDetail(payment);
+          } else {
+            // For medical payments, navigate to existing Pembayaran page
+            if (payment['id'] != null) {
+              await prefs.setInt('selected_kunjungan_id', payment['id']);
+              await prefs.setBool('from_list_payment', true);
+            }
 
-          if (!mounted) return;
+            if (!mounted) return;
 
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => Pembayaran(
-                kunjunganId: payment['id'],
-                fromList: true,
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Pembayaran(
+                  kunjunganId: payment['id'],
+                  fromList: true,
+                ),
               ),
-            ),
-          );
+            );
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // Header with type indicator
               Row(
                 children: [
+                  // TAMBAHKAN: Type indicator
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: paymentType == 'medicine' 
+                          ? Colors.blue.withOpacity(0.1)
+                          : Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: paymentType == 'medicine' 
+                            ? Colors.blue.withOpacity(0.3)
+                            : Colors.green.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          paymentType == 'medicine' ? Icons.medication : Icons.local_hospital,
+                          size: 12,
+                          color: paymentType == 'medicine' ? Colors.blue : Colors.green,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          paymentType == 'medicine' ? 'Obat' : 'Medis',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: paymentType == 'medicine' ? Colors.blue : Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1068,7 +1296,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
                         Row(
                           children: [
                             Icon(
-                              Icons.local_hospital,
+                              paymentType == 'medicine' ? Icons.local_pharmacy : Icons.local_hospital,
                               size: 16,
                               color: Colors.grey.shade600,
                             ),
@@ -1145,24 +1373,45 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
                       ),
                     ],
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.confirmation_number,
-                        size: 16,
-                        color: Colors.grey.shade600,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'No. ${noAntrian ?? '-'}',
-                        style: TextStyle(
-                          fontSize: 13,
+                  if (noAntrian != null && paymentType == 'medical')
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.confirmation_number,
+                          size: 16,
                           color: Colors.grey.shade600,
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'No. $noAntrian',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  // TAMBAHKAN: Show item count for medicine payments
+                  if (paymentType == 'medicine' && payment['total_items'] != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.inventory,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${payment['total_items']} item',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
 
@@ -1182,9 +1431,9 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Total Pembayaran',
-                      style: TextStyle(
+                    Text(
+                      paymentType == 'medicine' ? 'Total Pembelian' : 'Total Pembayaran',
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
@@ -1308,6 +1557,206 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // TAMBAHKAN: Method untuk show medicine payment detail
+  void _showMedicinePaymentDetail(Map<String, dynamic> payment) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.medication, color: Colors.blue, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Detail Pembelian Obat',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Transaction Info
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDetailRow('Kode Transaksi', payment['kode_transaksi'] ?? '-'),
+                    _buildDetailRow('Tanggal', _formatDate(payment['tanggal_kunjungan'])),
+                    _buildDetailRow('Status', payment['status_pembayaran'] ?? 'Belum Bayar'),
+                    if (payment['metode_pembayaran_nama'] != null)
+                      _buildDetailRow('Metode Pembayaran', payment['metode_pembayaran_nama']),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Items List
+              const Text(
+                'Daftar Obat:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: payment['items']?.length ?? 0,
+                  itemBuilder: (context, index) {
+                    final item = payment['items'][index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item['nama_obat'] ?? 'Obat',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (item['dosis'] != null)
+                                    Text(
+                                      'Dosis: ${item['dosis']}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${item['jumlah'] ?? 0}x',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              formatCurrency(toDoubleValue(item['sub_total'])),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              
+              // Total
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00897B).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF00897B).withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total Pembelian:',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      formatCurrency(toDoubleValue(payment['total_tagihan'])),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF00897B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ),
+          const Text(': ', style: TextStyle(fontSize: 12)),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -205,7 +205,7 @@ class _PesanJadwalState extends State<PesanJadwal>
 
     try {
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getDataPoli'),
+        Uri.parse('http://10.61.209.71:8000/api/getDataPoli'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -237,7 +237,7 @@ class _PesanJadwalState extends State<PesanJadwal>
 
     try {
       final response = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/getAllDokter'),
+        Uri.parse('http://10.61.209.71:8000/api/getAllDokter'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -527,7 +527,7 @@ class _PesanJadwalState extends State<PesanJadwal>
 
     try {
       final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/kunjungan/create'),
+        Uri.parse('http://10.61.209.71:8000/api/kunjungan/create'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -1368,7 +1368,7 @@ class _PesanJadwalState extends State<PesanJadwal>
                                         borderRadius: BorderRadius.circular(12),
                                         child: dokter['foto_dokter'] != null
                                             ? Image.network(
-                                                'https://admin.royal-klinik.cloud/storage/${dokter['foto_dokter']}',
+                                                'http://10.61.209.71:8000/storage/${dokter['foto_dokter']}',
                                                 fit: BoxFit.cover,
                                                 errorBuilder:
                                                     (

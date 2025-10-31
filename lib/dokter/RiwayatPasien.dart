@@ -1,18 +1,19 @@
+import 'package:RoyalClinic/dokter/DetailRiwayatPasien.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'DetailRiwayatPasien.dart';
 
 class RiwayatPasienPage extends StatefulWidget {
   @override
   _RiwayatPasienPageState createState() => _RiwayatPasienPageState();
 }
 
-class _RiwayatPasienPageState extends State<RiwayatPasienPage> 
+class _RiwayatPasienPageState extends State<RiwayatPasienPage>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-  
   @override
   bool get wantKeepAlive => true;
 
@@ -20,9 +21,9 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
   List<dynamic> filteredRiwayatPasien = [];
   bool isLoading = true;
   String? errorMessage;
-  String baseUrl = 'https://admin.royal-klinik.cloud/api';
+  String baseUrl = 'http://10.61.209.71:8000/api';
   TextEditingController searchController = TextEditingController();
-  
+
   // Animation controllers
   late AnimationController _searchAnimationController;
   late Animation<double> _searchAnimation;
@@ -30,7 +31,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
   late Animation<double> _typingAnimation;
   late AnimationController _fadeAnimationController;
   late Animation<double> _fadeAnimation;
-  
+
   bool _isSearchFocused = false;
   final ScrollController _scrollController = ScrollController();
 
@@ -47,37 +48,34 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
       duration: Duration(milliseconds: 300),
       vsync: this,
     );
-    _searchAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _searchAnimationController,
-      curve: Curves.easeInOut,
-    ));
-    
+    _searchAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _searchAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
     _typingAnimationController = AnimationController(
       duration: Duration(milliseconds: 150),
       vsync: this,
     );
-    _typingAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.02,
-    ).animate(CurvedAnimation(
-      parent: _typingAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    _typingAnimation = Tween<double>(begin: 1.0, end: 1.02).animate(
+      CurvedAnimation(
+        parent: _typingAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     _fadeAnimationController = AnimationController(
       duration: Duration(milliseconds: 600),
       vsync: this,
     );
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _fadeAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _fadeAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
   }
 
   @override
@@ -93,24 +91,28 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
 
   void _filterPasien() {
     String query = searchController.text.toLowerCase().trim();
-    
+
     if (query.isNotEmpty) {
       _typingAnimationController.forward().then((_) {
         _typingAnimationController.reverse();
       });
     }
-    
+
     setState(() {
       if (query.isEmpty) {
         filteredRiwayatPasien = riwayatPasien;
       } else {
         filteredRiwayatPasien = riwayatPasien.where((pasien) {
-          String namaPasien = (pasien['pasien']['nama_pasien'] ?? '').toString().toLowerCase();
-          String noAntrian = (pasien['no_antrian'] ?? '').toString().toLowerCase();
+          String namaPasien = (pasien['pasien']['nama_pasien'] ?? '')
+              .toString()
+              .toLowerCase();
+          String noAntrian = (pasien['no_antrian'] ?? '')
+              .toString()
+              .toLowerCase();
           String status = (pasien['status'] ?? '').toString().toLowerCase();
-          return namaPasien.contains(query) || 
-                 noAntrian.contains(query) || 
-                 status.contains(query);
+          return namaPasien.contains(query) ||
+              noAntrian.contains(query) ||
+              status.contains(query);
         }).toList();
       }
     });
@@ -123,35 +125,55 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
         errorMessage = null;
       });
 
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? token = prefs.getString('token');
-
+      final prefs = await SharedPreferences.getInstance();
+      // >>> pakai token dokter dulu, fallback ke token umum
+      final token = prefs.getString('dokter_token') ?? prefs.getString('token');
       if (token == null) {
-        throw Exception('Token tidak ditemukan. Silakan login kembali.');
+        throw Exception(
+          'Token dokter tidak ditemukan. Silakan login sebagai Dokter.',
+        );
       }
 
-      final response = await http.get(
+      final resp = await http.get(
         Uri.parse('$baseUrl/dokter/riwayat-pasien-diperiksa'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
+          'Accept': 'application/json', // >>> penting biar server balas JSON
         },
       );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success']) {
-          setState(() {
-            riwayatPasien = data['data'];
-            filteredRiwayatPasien = riwayatPasien;
-            isLoading = false;
-          });
-          _fadeAnimationController.forward();
-        } else {
-          throw Exception(data['message']);
-        }
+      // Deteksi jika server balas HTML (redirect/error) → hindari jsonDecode meledak
+      final ct = resp.headers['content-type'] ?? '';
+      final isJson = ct.contains('application/json');
+
+      if (resp.statusCode != 200) {
+        final preview = resp.body.length > 200
+            ? resp.body.substring(0, 200)
+            : resp.body;
+        throw Exception(
+          'Gagal memuat data (${resp.statusCode}). ${isJson ? '' : 'Respons non-JSON: $preview'}',
+        );
+      }
+      if (!isJson) {
+        final preview = resp.body.length > 200
+            ? resp.body.substring(0, 200)
+            : resp.body;
+        throw Exception(
+          'Respons bukan JSON (mungkin redirect/login atau error HTML): $preview',
+        );
+      }
+
+      final data = json.decode(resp.body);
+      if (data['success'] == true) {
+        setState(() {
+          riwayatPasien = (data['data'] as List?) ?? [];
+          filteredRiwayatPasien = riwayatPasien;
+          isLoading = false;
+        });
+        _fadeAnimationController.forward();
       } else {
-        throw Exception('Gagal memuat data: ${response.statusCode}');
+        throw Exception(data['message'] ?? 'Gagal memuat data');
       }
     } catch (e) {
       setState(() {
@@ -163,16 +185,23 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
 
   Future<void> _showDetailRiwayat(dynamic kunjunganId) async {
     HapticFeedback.lightImpact();
-    
+
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? token = prefs.getString('token');
+      String? token =
+          prefs.getString('dokter_token') ?? prefs.getString('token');
+      if (token == null) {
+        throw Exception(
+          'Token dokter tidak ditemukan. Silakan login sebagai Dokter.',
+        );
+      }
 
       final response = await http.get(
         Uri.parse('$baseUrl/dokter/detail-riwayat-pasien/$kunjunganId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
+          'Accept': 'application/json', // >>> tambah ini
         },
       );
 
@@ -268,7 +297,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                     ],
                   ),
                 ),
-                
+
                 // Content dengan scroll yang lebih smooth
                 Expanded(
                   child: Scrollbar(
@@ -293,7 +322,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                             isSmallScreen,
                           ),
                           SizedBox(height: isSmallScreen ? 12 : 16),
-                          
+
                           _buildDetailSection(
                             'Informasi Kunjungan',
                             [
@@ -307,7 +336,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                             Icons.event_note_rounded,
                             isSmallScreen,
                           ),
-                          
+
                           if (detailData['emr'] != null) ...[
                             SizedBox(height: isSmallScreen ? 12 : 16),
                             _buildDetailSection(
@@ -323,7 +352,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                               Icons.medical_information_rounded,
                               isSmallScreen,
                             ),
-                            
+
                             SizedBox(height: isSmallScreen ? 12 : 16),
                             _buildDetailSection(
                               'Tanda Vital',
@@ -340,19 +369,22 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                               isSmallScreen,
                             ),
                           ],
-                          
+
                           if (_hasValidResep(detailData)) ...[
                             SizedBox(height: isSmallScreen ? 12 : 16),
-                            _buildResepSection(_getResepData(detailData), isSmallScreen),
+                            _buildResepSection(
+                              _getResepData(detailData),
+                              isSmallScreen,
+                            ),
                           ],
-                          
+
                           SizedBox(height: 20),
                         ],
                       ),
                     ),
                   ),
                 ),
-                
+
                 // Footer actions dengan styling yang lebih baik
                 Container(
                   padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
@@ -363,10 +395,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                       bottomRight: Radius.circular(20),
                     ),
                     border: Border(
-                      top: BorderSide(
-                        color: Colors.grey.shade200,
-                        width: 1,
-                      ),
+                      top: BorderSide(color: Colors.grey.shade200, width: 1),
                     ),
                   ),
                   child: Row(
@@ -374,7 +403,10 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                     children: [
                       ElevatedButton.icon(
                         onPressed: () => Navigator.of(context).pop(),
-                        icon: Icon(Icons.close_rounded, size: isSmallScreen ? 16 : 18),
+                        icon: Icon(
+                          Icons.close_rounded,
+                          size: isSmallScreen ? 16 : 18,
+                        ),
                         label: Text(
                           'Tutup',
                           style: TextStyle(
@@ -459,34 +491,38 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
             ],
           ),
           SizedBox(height: 12),
-          ...items.map((item) => Padding(
-            padding: EdgeInsets.only(bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  margin: EdgeInsets.only(top: 6),
-                  width: 4,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: titleColor.withOpacity(0.7),
-                    shape: BoxShape.circle,
+          ...items
+              .map(
+                (item) => Padding(
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        margin: EdgeInsets.only(top: 6),
+                        width: 4,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: titleColor.withOpacity(0.7),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          item,
+                          style: TextStyle(
+                            fontSize: isSmallScreen ? 12 : 14,
+                            height: 1.4,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    item,
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 12 : 14,
-                      height: 1.4,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )).toList(),
+              )
+              .toList(),
         ],
       ),
     );
@@ -550,13 +586,15 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
               if (obat != null && obat is Map<String, dynamic>) {
                 namaObat = _safeGetString(obat, 'nama_obat');
                 dosis = _safeGetString(obat, 'dosis');
-                
-                if (obat.containsKey('pivot') && obat['pivot'] != null && obat['pivot'] is Map<String, dynamic>) {
+
+                if (obat.containsKey('pivot') &&
+                    obat['pivot'] != null &&
+                    obat['pivot'] is Map<String, dynamic>) {
                   var pivotData = obat['pivot'] as Map<String, dynamic>;
-                  
+
                   jumlah = _safeGetString(pivotData, 'jumlah');
                   keterangan = _safeGetString(pivotData, 'keterangan');
-                  
+
                   String pivotDosis = _safeGetString(pivotData, 'dosis');
                   if (pivotDosis != 'N/A' && pivotDosis.isNotEmpty) {
                     dosis = pivotDosis;
@@ -610,9 +648,24 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                     ],
                   ),
                   SizedBox(height: 8),
-                  _buildObatInfo('Jumlah', '$jumlah tablet', Icons.inventory_rounded, isSmallScreen),
-                  _buildObatInfo('Dosis', '$dosis mg', Icons.medication_rounded, isSmallScreen),
-                  _buildObatInfo('Keterangan', keterangan, Icons.notes_rounded, isSmallScreen),
+                  _buildObatInfo(
+                    'Jumlah',
+                    '$jumlah tablet',
+                    Icons.inventory_rounded,
+                    isSmallScreen,
+                  ),
+                  _buildObatInfo(
+                    'Dosis',
+                    '$dosis mg',
+                    Icons.medication_rounded,
+                    isSmallScreen,
+                  ),
+                  _buildObatInfo(
+                    'Keterangan',
+                    keterangan,
+                    Icons.notes_rounded,
+                    isSmallScreen,
+                  ),
                 ],
               ),
             );
@@ -622,7 +675,12 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
     );
   }
 
-  Widget _buildObatInfo(String label, String value, IconData icon, bool isSmallScreen) {
+  Widget _buildObatInfo(
+    String label,
+    String value,
+    IconData icon,
+    bool isSmallScreen,
+  ) {
     return Padding(
       padding: EdgeInsets.only(bottom: 4),
       child: Row(
@@ -669,22 +727,28 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
   bool _hasValidResep(dynamic detailData) {
     try {
       if (detailData == null) return false;
-      
+
       if (detailData['resep'] != null) {
         var resep = detailData['resep'];
-        
+
         if (resep is List && resep.isNotEmpty) {
           var firstResep = resep[0];
-          if (firstResep is Map && firstResep['obat'] != null && firstResep['obat'] is List && (firstResep['obat'] as List).isNotEmpty) {
+          if (firstResep is Map &&
+              firstResep['obat'] != null &&
+              firstResep['obat'] is List &&
+              (firstResep['obat'] as List).isNotEmpty) {
             return true;
           }
         }
-        
-        if (resep is Map && resep['obat'] != null && resep['obat'] is List && (resep['obat'] as List).isNotEmpty) {
+
+        if (resep is Map &&
+            resep['obat'] != null &&
+            resep['obat'] is List &&
+            (resep['obat'] as List).isNotEmpty) {
           return true;
         }
       }
-      
+
       return false;
     } catch (e) {
       return false;
@@ -694,20 +758,22 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
   List<dynamic> _getResepData(dynamic detailData) {
     try {
       if (detailData == null || detailData['resep'] == null) return [];
-      
+
       var resep = detailData['resep'];
-      
+
       if (resep is List && resep.isNotEmpty) {
         var firstResep = resep[0];
-        if (firstResep is Map && firstResep['obat'] != null && firstResep['obat'] is List) {
+        if (firstResep is Map &&
+            firstResep['obat'] != null &&
+            firstResep['obat'] is List) {
           return List<dynamic>.from(firstResep['obat']);
         }
       }
-      
+
       if (resep is Map && resep['obat'] != null && resep['obat'] is List) {
         return List<dynamic>.from(resep['obat']);
       }
-      
+
       return [];
     } catch (e) {
       return [];
@@ -726,9 +792,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
         ),
         backgroundColor: Colors.red.shade400,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: EdgeInsets.all(16),
       ),
     );
@@ -744,7 +808,13 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
     }
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isSmallScreen) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    bool isSmallScreen,
+  ) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: isSmallScreen ? 12 : 16,
@@ -803,7 +873,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
 
@@ -861,7 +931,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                     isSmallScreen,
                   ),
                 ),
-                
+
                 // Search Bar dengan animasi yang lebih halus
                 AnimatedBuilder(
                   animation: _searchAnimation,
@@ -873,7 +943,9 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1 + (_searchAnimation.value * 0.05)),
+                            color: Colors.black.withOpacity(
+                              0.1 + (_searchAnimation.value * 0.05),
+                            ),
                             blurRadius: 10 + (_searchAnimation.value * 5),
                             offset: Offset(0, 4 + (_searchAnimation.value * 2)),
                           ),
@@ -898,7 +970,8 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                               child: TextField(
                                 controller: searchController,
                                 decoration: InputDecoration(
-                                  hintText: 'Cari nama pasien, no. antrian, atau status...',
+                                  hintText:
+                                      'Cari nama pasien, no. antrian, atau status...',
                                   hintStyle: TextStyle(
                                     color: Colors.grey.shade500,
                                     fontSize: isSmallScreen ? 12 : 14,
@@ -908,8 +981,8 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                                     curve: Curves.easeInOut,
                                     child: Icon(
                                       Icons.search_rounded,
-                                      color: _isSearchFocused 
-                                          ? Colors.teal.shade600 
+                                      color: _isSearchFocused
+                                          ? Colors.teal.shade600
                                           : Colors.grey.shade500,
                                       size: 20 + (_searchAnimation.value * 2),
                                     ),
@@ -926,7 +999,8 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                                             ),
                                             onPressed: () {
                                               searchController.clear();
-                                              _typingAnimationController.reset();
+                                              _typingAnimationController
+                                                  .reset();
                                             },
                                           )
                                         : SizedBox(
@@ -971,7 +1045,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
               ],
             ),
           ),
-          
+
           // Content area
           Expanded(
             child: isLoading
@@ -980,7 +1054,9 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.teal.shade600),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.teal.shade600,
+                          ),
                           strokeWidth: 3,
                         ),
                         SizedBox(height: 16),
@@ -995,29 +1071,33 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                     ),
                   )
                 : errorMessage != null
-                    ? _buildErrorWidget(isSmallScreen)
-                    : filteredRiwayatPasien.isEmpty
-                        ? _buildEmptyWidget(isSmallScreen)
-                        : FadeTransition(
-                            opacity: _fadeAnimation,
-                            child: RefreshIndicator(
-                              onRefresh: _loadRiwayatPasien,
-                              color: Colors.teal.shade600,
-                              child: Scrollbar(
-                                controller: _scrollController,
-                                child: ListView.builder(
-                                  controller: _scrollController,
-                                  padding: EdgeInsets.all(16),
-                                  physics: BouncingScrollPhysics(),
-                                  itemCount: filteredRiwayatPasien.length,
-                                  itemBuilder: (context, index) {
-                                    final pasien = filteredRiwayatPasien[index];
-                                    return _buildPasienCard(pasien, index, isSmallScreen);
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
+                ? _buildErrorWidget(isSmallScreen)
+                : filteredRiwayatPasien.isEmpty
+                ? _buildEmptyWidget(isSmallScreen)
+                : FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: RefreshIndicator(
+                      onRefresh: _loadRiwayatPasien,
+                      color: Colors.teal.shade600,
+                      child: Scrollbar(
+                        controller: _scrollController,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: EdgeInsets.all(16),
+                          physics: BouncingScrollPhysics(),
+                          itemCount: filteredRiwayatPasien.length,
+                          itemBuilder: (context, index) {
+                            final pasien = filteredRiwayatPasien[index];
+                            return _buildPasienCard(
+                              pasien,
+                              index,
+                              isSmallScreen,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -1096,8 +1176,8 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
               shape: BoxShape.circle,
             ),
             child: Icon(
-              searchController.text.isNotEmpty 
-                  ? Icons.search_off_rounded 
+              searchController.text.isNotEmpty
+                  ? Icons.search_off_rounded
                   : Icons.folder_open_rounded,
               size: isSmallScreen ? 48 : 64,
               color: Colors.grey.shade400,
@@ -1105,7 +1185,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
           ),
           SizedBox(height: 16),
           Text(
-            searchController.text.isNotEmpty 
+            searchController.text.isNotEmpty
                 ? 'Tidak ada pasien ditemukan'
                 : 'Belum Ada Riwayat Pasien',
             style: TextStyle(
@@ -1148,7 +1228,20 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _showDetailRiwayat(pasien['id']),
+          onTap: () {
+            final id = (pasien['id'] as num?)?.toInt();
+            if (id == null) {
+              _showErrorSnackBar('ID kunjungan tidak ditemukan');
+              return;
+            }
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DetailRiwayatPasienPage(kunjunganId: id),
+              ),
+            );
+          },
+
           child: Padding(
             padding: EdgeInsets.all(isSmallScreen ? 14 : 16),
             child: Row(
@@ -1161,14 +1254,11 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                     height: isSmallScreen ? 55 : 60,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.teal.shade300,
-                        width: 2,
-                      ),
+                      border: Border.all(color: Colors.teal.shade300, width: 2),
                       image: pasien['pasien']['foto_pasien'] != null
                           ? DecorationImage(
                               image: NetworkImage(
-                                'https://admin.royal-klinik.cloud/storage/${pasien['pasien']['foto_pasien']}',
+                                'http://10.61.209.71:8000/storage/${pasien['pasien']['foto_pasien']}',
                               ),
                               fit: BoxFit.cover,
                             )
@@ -1184,14 +1274,15 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                   ),
                 ),
                 SizedBox(width: 16),
-                
+
                 // Informasi pasien
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        pasien['pasien']['nama_pasien'] ?? 'Nama tidak tersedia',
+                        pasien['pasien']['nama_pasien'] ??
+                            'Nama tidak tersedia',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: isSmallScreen ? 14 : 16,
@@ -1214,7 +1305,8 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                         Colors.blue.shade600,
                         isSmallScreen,
                       ),
-                      if (pasien['emr'] != null && pasien['emr']['diagnosis'] != null) ...[
+                      if (pasien['emr'] != null &&
+                          pasien['emr']['diagnosis'] != null) ...[
                         SizedBox(height: 2),
                         _buildInfoRow(
                           Icons.medical_services_rounded,
@@ -1228,7 +1320,7 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
                     ],
                   ),
                 ),
-                
+
                 // Arrow icon
                 Container(
                   padding: EdgeInsets.all(8),
@@ -1250,14 +1342,15 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String text, Color color, bool isSmallScreen) {
+  Widget _buildInfoRow(
+    IconData icon,
+    String text,
+    Color color,
+    bool isSmallScreen,
+  ) {
     return Row(
       children: [
-        Icon(
-          icon,
-          size: isSmallScreen ? 12 : 14,
-          color: color,
-        ),
+        Icon(icon, size: isSmallScreen ? 12 : 14, color: color),
         SizedBox(width: 6),
         Expanded(
           child: Text(
@@ -1277,16 +1370,25 @@ class _RiwayatPasienPageState extends State<RiwayatPasienPage>
   Widget _buildStatusChip(String? status, bool isSmallScreen) {
     Color backgroundColor;
     Color textColor;
-    
+
     switch (status?.toLowerCase()) {
       case 'succeed':
       case 'completed':
+      case 'selesai':
+      case 'done':
         backgroundColor = Colors.green.shade100;
         textColor = Colors.green.shade700;
         break;
       case 'canceled':
+      case 'dibatalkan':
         backgroundColor = Colors.red.shade100;
         textColor = Colors.red.shade700;
+        break;
+      case 'payment':
+      case 'paid':
+      case 'lunas':
+        backgroundColor = Colors.blue.shade100; // <<< bebas, biar beda
+        textColor = Colors.blue.shade700;
         break;
       default:
         backgroundColor = Colors.orange.shade100;
