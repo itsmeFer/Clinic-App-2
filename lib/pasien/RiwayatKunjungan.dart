@@ -58,7 +58,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
       }
 
       final response = await http.get(
-        Uri.parse('http://10.61.209.71:8000/api/kunjungan/riwayat/$pasienId'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/kunjungan/riwayat/$pasienId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -154,7 +154,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
       print('Request Body: $requestBody');
 
       final response = await http.post(
-        Uri.parse('http://10.61.209.71:8000/api/kunjungan/batalkan'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/kunjungan/batalkan'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -405,7 +405,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
               borderRadius: BorderRadius.circular(9),
               child: pasienInfo!['foto_pasien'] != null
                   ? Image.network(
-                      'http://10.61.209.71:8000/storage/${pasienInfo!['foto_pasien']}',
+                      'https://admin.royal-klinik.cloud/storage/${pasienInfo!['foto_pasien']}',
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return const Icon(
@@ -1045,7 +1045,7 @@ class _RiwayatKunjunganPageState extends State<RiwayatKunjunganPage> {
                                       borderRadius: BorderRadius.circular(12),
                                       child: dokter?['foto_dokter'] != null
                                           ? Image.network(
-                                              'http://10.61.209.71:8000/storage/${dokter['foto_dokter']}',
+                                              'https://admin.royal-klinik.cloud/storage/${dokter['foto_dokter']}',
                                               fit: BoxFit.cover,
                                               errorBuilder: (context, error, stackTrace) {
                                                 return const Icon(
@@ -1477,7 +1477,7 @@ class _MainWrapperWithIndexState extends State<MainWrapperWithIndex> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.61.209.71:8000/api/getAllDokter'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/getAllDokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',

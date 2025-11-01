@@ -27,7 +27,7 @@ class LocalNotificationService {
 
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.61.209.71:8000/api',
+    defaultValue: 'https://admin.royal-klinik.cloud/api',
   );
   static const int _maxStoredNotifications = 100;
   static const Duration _pollingInterval = Duration(seconds: 30);

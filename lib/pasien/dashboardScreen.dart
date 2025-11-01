@@ -161,7 +161,7 @@ class _MainWrapperState extends State<MainWrapper> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.61.209.71:8000/api/getAllDokter'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/getAllDokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -373,7 +373,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return;
       }
       final res = await http.get(
-        Uri.parse('http://10.61.209.71:8000/api/pasien/profile'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -431,7 +431,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (!mounted) return;
       final token = prefs.getString('token');
       final res = await http.get(
-        Uri.parse('http://10.61.209.71:8000/api/getDataTestimoni'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/getDataTestimoni'),
         headers: {if (token != null) 'Authorization': 'Bearer $token'},
       );
       if (!mounted) return;
@@ -640,38 +640,126 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        _safeImageSquare(
-          url: pasien['foto_pasien'] != null
-              ? 'http://10.61.209.71:8000/storage/${pasien['foto_pasien']}'
-              : null,
-          size: 58,
-          fallbackIcon: Icons.person,
+        Row(
+          children: [
+            _safeImageSquare(
+              url: pasien['foto_pasien'] != null
+                  ? 'https://admin.royal-klinik.cloud/storage/${pasien['foto_pasien']}'
+                  : null,
+              size: 58,
+              fallbackIcon: Icons.person,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (pasien['nama_pasien']?.toString().isNotEmpty == true)
+                        ? pasien['nama_pasien']
+                        : pasien['username'] ?? '-',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: TealX.text,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    pasien['email']?.toString() ?? '-',
+                    style: const TextStyle(fontSize: 13, color: TealX.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                (pasien['nama_pasien']?.toString().isNotEmpty == true)
-                    ? pasien['nama_pasien']
-                    : pasien['username'] ?? '-',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: TealX.text,
+        
+        // ✅ TAMBAHAN: Tampilkan NO EMR di bawah
+        if (pasien['no_emr'] != null && pasien['no_emr'].toString().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: TealX.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: TealX.primary.withOpacity(0.2),
+                  width: 1,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                pasien['email']?.toString() ?? '-',
-                style: const TextStyle(fontSize: 13, color: TealX.textMuted),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: TealX.primary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.badge_outlined,
+                      size: 18,
+                      color: TealX.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Nomor Rekam Medis',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: TealX.textMuted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          pasien['no_emr'].toString(),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: TealX.primary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // ✅ BADGE MOBILE/WEB
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: pasien['no_emr'].toString().startsWith('RMB')
+                          ? const Color(0xFF2196F3) // Blue for Mobile
+                          : const Color(0xFF4CAF50), // Green for Web
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      pasien['no_emr'].toString().startsWith('RMB')
+                          ? 'MOBILE'
+                          : 'WEB',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1592,7 +1680,7 @@ class _DokterTersediaSection extends StatelessWidget {
                               ),
                             )
                           : Image.network(
-                              'http://10.61.209.71:8000/storage/$foto',
+                              'https://admin.royal-klinik.cloud/storage/$foto',
                               width: 70,
                               height: 70,
                               fit: BoxFit.cover,

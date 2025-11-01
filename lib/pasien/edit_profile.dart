@@ -31,6 +31,7 @@ class _EditProfilePageState extends State<EditProfilePage>
 
   bool isLoading = false;
   bool isLoadingData = true;
+  Map<String, dynamic>? profileData;
 
   // --- Palette (teal-forward, ala Gojek vibes)
   static const Color kTeal = Color(0xFF00BFA5); // A700
@@ -91,41 +92,52 @@ class _EditProfilePageState extends State<EditProfilePage>
     super.dispose();
   }
 
-  Future<void> fetchDataProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    if (token == null) {
-      safeSetState(() => isLoadingData = false);
-      return;
-    }
-
-    try {
-      final response = await http.get(
-        Uri.parse('http://10.61.209.71:8000/api/pasien/profile'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (!mounted) return;
-
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
-        safeSetState(() {
-          namaController.text = data['data']['nama_pasien'] ?? '';
-          alamatController.text = data['data']['alamat'] ?? '';
-          tanggalLahirController.text = data['data']['tanggal_lahir'] ?? '';
-          jenisKelamin = data['data']['jenis_kelamin'];
-          currentFotoUrl = data['data']['foto_pasien'];
-          qrPayload = data['data']['qr_code_pasien'];
-          isLoadingData = false;
-        });
-      } else {
-        safeSetState(() => isLoadingData = false);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      safeSetState(() => isLoadingData = false);
-    }
+Future<void> fetchDataProfile() async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('token');
+  if (token == null) {
+    safeSetState(() => isLoadingData = false);
+    return;
   }
+
+  try {
+    final response = await http.get(
+      Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (!mounted) return;
+
+    final data = jsonDecode(response.body);
+    
+    // ✅ TAMBAHKAN DEBUG LOG INI
+    print('=== DEBUG PROFILE DATA ===');
+    print('Response: ${response.body}');
+    print('NO EMR: ${data['data']['no_emr']}');
+    print('Profile Data: ${data['data']}');
+    print('========================');
+    
+    if (response.statusCode == 200 && data['success'] == true) {
+      safeSetState(() {
+        profileData = data['data'];
+        
+        namaController.text = data['data']['nama_pasien'] ?? '';
+        alamatController.text = data['data']['alamat'] ?? '';
+        tanggalLahirController.text = data['data']['tanggal_lahir'] ?? '';
+        jenisKelamin = data['data']['jenis_kelamin'];
+        currentFotoUrl = data['data']['foto_pasien'];
+        qrPayload = data['data']['qr_code_pasien'];
+        isLoadingData = false;
+      });
+    } else {
+      safeSetState(() => isLoadingData = false);
+    }
+  } catch (e) {
+    print('Error fetching profile: $e'); // ✅ DEBUG ERROR
+    if (!mounted) return;
+    safeSetState(() => isLoadingData = false);
+  }
+}
 
   // Fungsi Logout
   Future<void> _showLogoutDialog() async {
@@ -392,7 +404,7 @@ class _EditProfilePageState extends State<EditProfilePage>
 
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse('http://10.61.209.71:8000/api/pasien/update'),
+      Uri.parse('https://admin.royal-klinik.cloud/api/pasien/update'),
     );
 
     if (token != null) {
@@ -541,7 +553,7 @@ class _EditProfilePageState extends State<EditProfilePage>
                       ? Image.file(selectedImage!, fit: BoxFit.cover)
                       : currentFotoUrl != null
                       ? Image.network(
-                          'http://10.61.209.71:8000/storage/$currentFotoUrl',
+                          'https://admin.royal-klinik.cloud/storage/$currentFotoUrl',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             return _avatarPlaceholder();
@@ -960,39 +972,134 @@ class _EditProfilePageState extends State<EditProfilePage>
                         const SizedBox(height: 24),
 
                         _section(
-                          title: 'Data Pribadi',
-                          child: Column(
-                            children: [
-                              _buildTextField(
-                                controller: namaController,
-                                label: 'Nama Lengkap',
-                                hint: 'Masukkan nama lengkap',
-                                icon: Icons.person_outline,
-                                validator: (v) => v!.isEmpty
-                                    ? 'Nama tidak boleh kosong'
-                                    : null,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildTextField(
-                                controller: alamatController,
-                                label: 'Alamat',
-                                hint: 'Masukkan alamat lengkap',
-                                icon: Icons.location_on_outlined,
-                                maxLines: 3,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildTextField(
-                                controller: tanggalLahirController,
-                                label: 'Tanggal Lahir',
-                                hint: 'Pilih tanggal lahir',
-                                readOnly: true,
-                                onTap: _selectDate,
-                              ),
-                              const SizedBox(height: 16),
-                              _genderSelector(),
-                            ],
-                          ),
-                        ),
+  title: 'Data Pribadi',
+  child: Column(
+    children: [
+      // ✅ TAMBAHAN: Tampilkan NO EMR di paling atas (read-only)
+      if ((profileData?['no_emr']?.toString() ?? '').isNotEmpty)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: kTeal.withOpacity(.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.badge_outlined,
+                    color: kTealDark,
+                    size: 18,
+                  ),
+                ),
+                const Text(
+                  'Nomor Rekam Medis',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              decoration: BoxDecoration(
+                color: kTeal.withOpacity(.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: kTeal.withOpacity(.15),
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      profileData!['no_emr'].toString(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: kTealDark,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kTealDark,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      profileData!['no_emr'].toString().startsWith('RMB')
+                          ? 'MOBILE'
+                          : 'WEB',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Nomor ini digunakan untuk identifikasi rekam medis Anda',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      
+      // Field yang sudah ada sebelumnya
+      _buildTextField(
+        controller: namaController,
+        label: 'Nama Lengkap',
+        hint: 'Masukkan nama lengkap',
+        icon: Icons.person_outline,
+        validator: (v) => v!.isEmpty
+            ? 'Nama tidak boleh kosong'
+            : null,
+      ),
+      const SizedBox(height: 16),
+      _buildTextField(
+        controller: alamatController,
+        label: 'Alamat',
+        hint: 'Masukkan alamat lengkap',
+        icon: Icons.location_on_outlined,
+        maxLines: 3,
+      ),
+      const SizedBox(height: 16),
+      _buildTextField(
+        controller: tanggalLahirController,
+        label: 'Tanggal Lahir',
+        hint: 'Pilih tanggal lahir',
+        readOnly: true,
+        onTap: _selectDate,
+      ),
+      const SizedBox(height: 16),
+      _genderSelector(),
+    ],
+  ),
+),
 
                         const SizedBox(height: 24),
 

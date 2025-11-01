@@ -208,7 +208,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
   // TAMBAHKAN: Method untuk fetch pembayaran obat
   Future<void> _fetchMedicinePayments(String token, int pasienId) async {
     try {
-      final url = 'http://10.61.209.71:8000/api/penjualan-obat/riwayat/$pasienId';
+      final url = 'https://admin.royal-klinik.cloud/api/penjualan-obat/riwayat/$pasienId';
       final response = await http.get(
         Uri.parse(url),
         headers: {
@@ -292,7 +292,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
   Future<void> _fetchMedicalPayments(String token, int pasienId) async {
     try {
       // Try list endpoint first
-      final listUrl = 'http://10.61.209.71:8000/api/pembayaran/list/$pasienId';
+      final listUrl = 'https://admin.royal-klinik.cloud/api/pembayaran/list/$pasienId';
       final listResponse = await http.get(
         Uri.parse(listUrl),
         headers: {
@@ -313,7 +313,7 @@ class _ListPembayaranState extends State<ListPembayaran> with TickerProviderStat
       }
 
       // Fallback to patient endpoint
-      final patientUrl = 'http://10.61.209.71:8000/api/pembayaran/pasien/$pasienId';
+      final patientUrl = 'https://admin.royal-klinik.cloud/api/pembayaran/pasien/$pasienId';
       final patientResponse = await http.get(
         Uri.parse(patientUrl),
         headers: {

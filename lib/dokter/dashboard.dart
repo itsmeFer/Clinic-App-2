@@ -134,7 +134,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (!mounted) return;
 
       final response = await http.get(
-        Uri.parse('http://10.61.209.71:8000/api/dokter/get-data-dokter'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/dokter/get-data-dokter'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -168,7 +168,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
 
       final response = await http.get(
         Uri.parse(
-          'http://10.61.209.71:8000/api/dokter/get-data-kunjungan-by-id-dokter',
+          'https://admin.royal-klinik.cloud/api/dokter/get-data-kunjungan-by-id-dokter',
         ),
         headers: {
           'Authorization': 'Bearer $token',
@@ -236,7 +236,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (!mounted) return;
 
       await http.post(
-        Uri.parse('http://10.61.209.71:8000/api/logout'),
+        Uri.parse('https://admin.royal-klinik.cloud/api/logout'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -576,7 +576,7 @@ class _WelcomeCard extends StatelessWidget {
               child: ClipOval(
                 child: SafeNetworkImage(
                   url: (foto != null)
-                      ? 'http://10.61.209.71:8000/storage/$foto'
+                      ? 'https://admin.royal-klinik.cloud/storage/$foto'
                       : null,
                   size: (isSmall ? 52 : 60),
                   fallback: Icon(

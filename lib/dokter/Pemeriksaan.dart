@@ -14,9 +14,8 @@ class Pemeriksaan extends StatefulWidget {
   State<Pemeriksaan> createState() => _PemeriksaanState();
 }
 
-class _PemeriksaanState extends State<Pemeriksaan> 
+class _PemeriksaanState extends State<Pemeriksaan>
     with AutomaticKeepAliveClientMixin {
-  
   @override
   bool get wantKeepAlive => true;
 
@@ -35,7 +34,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
 
   // Focus nodes untuk optimasi keyboard
   final List<FocusNode> _focusNodes = [];
-  
+
   bool _isLoading = false;
 
   // Obat related
@@ -45,7 +44,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
   final _searchObatController = TextEditingController();
   String _searchObatQuery = '';
   String _riwayatDiagnosisOtomatis = '';
-  
+
   // Layanan related
   List<Map<String, dynamic>> _availableLayanan = [];
   List<Map<String, dynamic>> _selectedLayanan = [];
@@ -58,7 +57,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
   Timer? _layananSearchDebounce;
 
   // API Configuration
-  static const String baseUrl = 'http://10.61.209.71:8000/api';
+  static const String baseUrl = 'https://admin.royal-klinik.cloud/api';
   String? _authToken;
 
   // Performance optimization: Cache filtered results
@@ -70,21 +69,21 @@ class _PemeriksaanState extends State<Pemeriksaan>
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize focus nodes (15 text fields total)
     for (int i = 0; i < 15; i++) {
       _focusNodes.add(FocusNode());
     }
-    
+
     // Setup search listeners with debouncing - Increase debounce time
     _searchObatController.addListener(() {
       _onObatSearchChanged(_searchObatController.text);
     });
-    
+
     _searchLayananController.addListener(() {
       _onLayananSearchChanged(_searchLayananController.text);
     });
-    
+
     _initializeData();
   }
 
@@ -94,11 +93,11 @@ class _PemeriksaanState extends State<Pemeriksaan>
     for (var node in _focusNodes) {
       node.dispose();
     }
-    
+
     // Cancel timers
     _obatSearchDebounce?.cancel();
     _layananSearchDebounce?.cancel();
-    
+
     // Dispose controllers
     _keluhanUtamaController.dispose();
     _riwayatPenyakitDahuluController.dispose();
@@ -111,7 +110,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
     _diagnosisController.dispose();
     _searchObatController.dispose();
     _searchLayananController.dispose();
-    
+
     super.dispose();
   }
 
@@ -197,7 +196,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
           });
 
           _fillInitialData();
-          print('✅ Kunjungan data loaded: ${kunjunganData['tanggal_kunjungan']}');
+          print(
+            '✅ Kunjungan data loaded: ${kunjunganData['tanggal_kunjungan']}',
+          );
         }
       }
     } catch (e) {
@@ -303,7 +304,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
               _riwayatPenyakitDahuluController.text = _riwayatDiagnosisOtomatis;
             }
           });
-          print('✅ Riwayat diagnosis loaded: ${_riwayatDiagnosisOtomatis.substring(0, 50)}...');
+          print(
+            '✅ Riwayat diagnosis loaded: ${_riwayatDiagnosisOtomatis.substring(0, 50)}...',
+          );
         }
       }
     } catch (e) {
@@ -320,12 +323,15 @@ class _PemeriksaanState extends State<Pemeriksaan>
 
     try {
       final token = await getToken();
-      final poliId = widget.kunjunganData['poli_id'];
+      if (token == null || token.isEmpty) {
+        _showErrorSnackbar('Token tidak ditemukan. Silakan login ulang.');
+        return;
+      }
 
-      print('Loading layanan for poli_id: $poliId');
+      print('🔍 Loading SEMUA layanan (tanpa filter poli)');
 
       final response = await http.get(
-        Uri.parse('$baseUrl/dokter/get-layanan/$poliId'),
+        Uri.parse('$baseUrl/dokter/get-layanan'), // endpoint dokter
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -335,25 +341,55 @@ class _PemeriksaanState extends State<Pemeriksaan>
 
       if (!mounted) return;
 
-      print('Layanan response: ${response.statusCode} - ${response.body}');
+      print('📡 Layanan response: ${response.statusCode} - ${response.body}');
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final body = json.decode(response.body);
 
-        if (data['success'] == true) {
-          setState(() {
-            _availableLayanan = List<Map<String, dynamic>>.from(data['layanan'] ?? []);
-            _cachedFilteredLayanan = null; // Clear cache
-          });
-          print('Loaded ${_availableLayanan.length} layanan');
-        } else {
-          _showErrorSnackbar('Failed to load services: ${data['message']}');
+        // ✅ respons kamu: {"success":true,"message":"...","data":[...],"total":5}
+        final list = (body is Map && body['data'] is List)
+            ? List<Map<String, dynamic>>.from(body['data'])
+            : <Map<String, dynamic>>[];
+
+        // Normalisasi field agar UI konsisten
+        final normalized = list
+            .map((e) {
+              // Gunakan angka mentah bila ada, fallback dari string lokal "50.000,00"
+              final raw = (e['harga_layanan_raw'] ?? e['harga_layanan'] ?? '0')
+                  .toString();
+              final numeric =
+                  double.tryParse(
+                    raw.contains(',')
+                        ? raw.replaceAll('.', '').replaceAll(',', '.')
+                        : raw,
+                  ) ??
+                  0.0;
+
+              return {
+                'id': e['id'],
+                'nama_layanan': e['nama_layanan'] ?? e['nama'] ?? 'Layanan',
+                'harga_layanan':
+                    numeric, // disimpan numerik → formatter kamu aman
+                'poli_id': e['poli_id'], // boleh null
+              };
+            })
+            .where((e) => e['id'] != null && e['nama_layanan'] != null)
+            .toList();
+
+        setState(() {
+          _availableLayanan = normalized;
+          _cachedFilteredLayanan = null; // reset cache filter
+        });
+
+        print('✅ Loaded ${_availableLayanan.length} layanan (semua poli)');
+        if (_availableLayanan.isNotEmpty) {
+          print('🧪 Contoh item: ${_availableLayanan.first}');
         }
       } else {
         _showErrorSnackbar('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error loading layanan: $e');
+      print('❌ Error loading layanan: $e');
       if (mounted) {
         _showErrorSnackbar('Network error: $e');
       }
@@ -455,10 +491,12 @@ class _PemeriksaanState extends State<Pemeriksaan>
       } else {
         try {
           final errorData = json.decode(response.body);
-          String errorMessage = errorData['message'] ?? 'Server error: ${response.statusCode}';
+          String errorMessage =
+              errorData['message'] ?? 'Server error: ${response.statusCode}';
 
           if (response.statusCode == 400 && errorMessage.contains('Engaged')) {
-            errorMessage = 'Kunjungan harus dalam status Engaged untuk membuat EMR';
+            errorMessage =
+                'Kunjungan harus dalam status Engaged untuk membuat EMR';
           }
 
           _showErrorSnackbar(errorMessage);
@@ -879,35 +917,46 @@ class _PemeriksaanState extends State<Pemeriksaan>
     }
 
     _lastObatQuery = _searchObatQuery;
-    
+
     if (_searchObatQuery.isEmpty) {
       _cachedFilteredObat = _availableObat;
     } else {
       final query = _searchObatQuery.toLowerCase();
       _cachedFilteredObat = _availableObat
-          .where((obat) => (obat['nama_obat'] ?? '').toString().toLowerCase().contains(query))
+          .where(
+            (obat) => (obat['nama_obat'] ?? '')
+                .toString()
+                .toLowerCase()
+                .contains(query),
+          )
           .toList();
     }
-    
+
     return _cachedFilteredObat!;
   }
 
   List<Map<String, dynamic>> get _filteredLayanan {
-    if (_searchLayananQuery == _lastLayananQuery && _cachedFilteredLayanan != null) {
+    if (_searchLayananQuery == _lastLayananQuery &&
+        _cachedFilteredLayanan != null) {
       return _cachedFilteredLayanan!;
     }
 
     _lastLayananQuery = _searchLayananQuery;
-    
+
     if (_searchLayananQuery.isEmpty) {
       _cachedFilteredLayanan = _availableLayanan;
     } else {
       final query = _searchLayananQuery.toLowerCase();
       _cachedFilteredLayanan = _availableLayanan
-          .where((layanan) => (layanan['nama_layanan'] ?? '').toString().toLowerCase().contains(query))
+          .where(
+            (layanan) => (layanan['nama_layanan'] ?? '')
+                .toString()
+                .toLowerCase()
+                .contains(query),
+          )
           .toList();
     }
-    
+
     return _cachedFilteredLayanan!;
   }
 
@@ -1357,7 +1406,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
 
     try {
       DateTime dateTime;
-      
+
       if (tanggal.contains('T')) {
         dateTime = DateTime.parse(tanggal).toLocal();
       } else if (tanggal.contains('-')) {
@@ -1413,9 +1462,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
 
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -1453,7 +1500,8 @@ class _PemeriksaanState extends State<Pemeriksaan>
             SizedBox(height: isSmallScreen ? 14 : 16),
             _buildInfoRow(
               'Nama',
-              widget.kunjunganData['pasien']?['nama_pasien'] ?? 'Tidak tersedia',
+              widget.kunjunganData['pasien']?['nama_pasien'] ??
+                  'Tidak tersedia',
               isSmallScreen,
             ),
             SizedBox(height: isSmallScreen ? 8 : 10),
@@ -1596,7 +1644,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
         cacheExtent: 300, // Increased cache
         itemBuilder: (context, index) {
           final obat = filteredObat[index];
-          final isSelected = _selectedResep.any((resep) => resep['obat_id'] == obat['id']);
+          final isSelected = _selectedResep.any(
+            (resep) => resep['obat_id'] == obat['id'],
+          );
 
           return RepaintBoundary(
             child: _ObatListItem(
@@ -1650,7 +1700,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
             Text(
               _searchLayananQuery.isNotEmpty
                   ? 'Tidak ada layanan yang ditemukan dengan kata kunci "$_searchLayananQuery"'
-                  : 'Tidak ada layanan tersedia untuk poli ini',
+                  : 'Tidak ada layanan tersedia',
               style: TextStyle(
                 color: Colors.grey.shade600,
                 fontSize: isSmallScreen ? 12 : 14,
@@ -1697,7 +1747,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
 
@@ -1753,7 +1803,8 @@ class _PemeriksaanState extends State<Pemeriksaan>
                           _buildTextFormField(
                             controller: _keluhanUtamaController,
                             label: 'Keluhan Utama',
-                            hint: 'Keluhan utama dari pasien (tidak dapat diubah)',
+                            hint:
+                                'Keluhan utama dari pasien (tidak dapat diubah)',
                             maxLines: 3,
                             required: true,
                             readOnly: true,
@@ -1762,7 +1813,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                           SizedBox(height: isSmallScreen ? 12 : 16),
                           if (_riwayatDiagnosisOtomatis.isNotEmpty)
                             Container(
-                              margin: EdgeInsets.only(bottom: isSmallScreen ? 12 : 16),
+                              margin: EdgeInsets.only(
+                                bottom: isSmallScreen ? 12 : 16,
+                              ),
                               padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
                               decoration: BoxDecoration(
                                 color: Colors.blue.shade50,
@@ -1780,7 +1833,8 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                   SizedBox(width: isSmallScreen ? 8 : 10),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'Riwayat Diagnosis Otomatis',
@@ -1845,8 +1899,14 @@ class _PemeriksaanState extends State<Pemeriksaan>
                               label: 'Suhu Tubuh',
                               hint: '36.5',
                               suffixText: '°C',
-                              keyboardType: TextInputType.numberWithOptions(decimal: true),
-                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))],
+                              keyboardType: TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d+\.?\d{0,1}'),
+                                ),
+                              ],
                               focusNode: _focusNodes[4],
                             ),
                             const SizedBox(height: 12),
@@ -1856,7 +1916,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                               hint: '80',
                               suffixText: 'bpm',
                               keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               focusNode: _focusNodes[5],
                             ),
                             const SizedBox(height: 12),
@@ -1866,7 +1928,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                               hint: '20',
                               suffixText: '/menit',
                               keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               focusNode: _focusNodes[6],
                             ),
                             const SizedBox(height: 12),
@@ -1876,7 +1940,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                               hint: '98',
                               suffixText: '%',
                               keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               focusNode: _focusNodes[7],
                             ),
                           ] else ...[
@@ -1898,8 +1964,15 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                     label: 'Suhu Tubuh',
                                     hint: '36.5',
                                     suffixText: '°C',
-                                    keyboardType: TextInputType.numberWithOptions(decimal: true),
-                                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))],
+                                    keyboardType:
+                                        TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'^\d+\.?\d{0,1}'),
+                                      ),
+                                    ],
                                     focusNode: _focusNodes[4],
                                   ),
                                 ),
@@ -1915,7 +1988,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                     hint: '80',
                                     suffixText: 'bpm',
                                     keyboardType: TextInputType.number,
-                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                    ],
                                     focusNode: _focusNodes[5],
                                   ),
                                 ),
@@ -1927,7 +2002,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                     hint: '20',
                                     suffixText: '/menit',
                                     keyboardType: TextInputType.number,
-                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                    ],
                                     focusNode: _focusNodes[6],
                                   ),
                                 ),
@@ -1940,7 +2017,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                               hint: '98',
                               suffixText: '%',
                               keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               focusNode: _focusNodes[7],
                             ),
                           ],
@@ -1984,7 +2063,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                             child: TextField(
                               controller: _searchLayananController,
                               focusNode: _focusNodes[9],
-                              style: TextStyle(fontSize: isSmallScreen ? 13 : 14),
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 13 : 14,
+                              ),
                               decoration: InputDecoration(
                                 labelText: 'Cari Layanan',
                                 labelStyle: TextStyle(
@@ -1992,7 +2073,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                   color: Colors.blue.shade700,
                                 ),
                                 hintText: 'Masukkan nama layanan...',
-                                hintStyle: TextStyle(fontSize: isSmallScreen ? 11 : 12),
+                                hintStyle: TextStyle(
+                                  fontSize: isSmallScreen ? 11 : 12,
+                                ),
                                 prefixIcon: Icon(
                                   Icons.search,
                                   color: Colors.blue,
@@ -2014,15 +2097,22 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                     : null,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.blue, width: 2),
+                                  borderSide: const BorderSide(
+                                    color: Colors.blue,
+                                    width: 2,
+                                  ),
                                 ),
                                 filled: true,
                                 fillColor: Colors.white,
@@ -2126,7 +2216,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                             child: TextField(
                               controller: _searchObatController,
                               focusNode: _focusNodes[10],
-                              style: TextStyle(fontSize: isSmallScreen ? 13 : 14),
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 13 : 14,
+                              ),
                               decoration: InputDecoration(
                                 labelText: 'Cari Obat',
                                 labelStyle: TextStyle(
@@ -2134,7 +2226,9 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                   color: Colors.teal.shade700,
                                 ),
                                 hintText: 'Masukkan nama obat...',
-                                hintStyle: TextStyle(fontSize: isSmallScreen ? 11 : 12),
+                                hintStyle: TextStyle(
+                                  fontSize: isSmallScreen ? 11 : 12,
+                                ),
                                 prefixIcon: Icon(
                                   Icons.search,
                                   color: Colors.teal,
@@ -2156,15 +2250,22 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                     : null,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.teal, width: 2),
+                                  borderSide: const BorderSide(
+                                    color: Colors.teal,
+                                    width: 2,
+                                  ),
                                 ),
                                 filled: true,
                                 fillColor: Colors.white,
@@ -2367,10 +2468,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
                     children: [
                       IconButton(
                         onPressed: () => _editLayananItem(index),
-                        icon: Icon(
-                          Icons.edit,
-                          size: isSmallScreen ? 16 : 18,
-                        ),
+                        icon: Icon(Icons.edit, size: isSmallScreen ? 16 : 18),
                         color: Colors.blue.shade600,
                         constraints: const BoxConstraints(),
                         padding: EdgeInsets.all(isSmallScreen ? 2 : 4),
@@ -2378,10 +2476,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
                       SizedBox(width: isSmallScreen ? 2 : 4),
                       IconButton(
                         onPressed: () => _removeLayananFromSelection(index),
-                        icon: Icon(
-                          Icons.delete,
-                          size: isSmallScreen ? 16 : 18,
-                        ),
+                        icon: Icon(Icons.delete, size: isSmallScreen ? 16 : 18),
                         color: Colors.red.shade600,
                         constraints: const BoxConstraints(),
                         padding: EdgeInsets.all(isSmallScreen ? 2 : 4),
