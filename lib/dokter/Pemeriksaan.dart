@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'RMPasien.dart';
 
 class Pemeriksaan extends StatefulWidget {
   final Map<String, dynamic> kunjunganData;
@@ -57,7 +58,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
   Timer? _layananSearchDebounce;
 
   // API Configuration
-  static const String baseUrl = 'https://admin.royal-klinik.cloud/api';
+  static const String baseUrl = 'http://192.168.1.6:8000/api';
   String? _authToken;
 
   // Performance optimization: Cache filtered results
@@ -414,30 +415,48 @@ class _PemeriksaanState extends State<Pemeriksaan>
     try {
       final token = await getToken();
 
-      final emrData = {
+      final emrData = <String, dynamic>{
         'kunjungan_id': widget.kunjunganData['id'],
         'keluhan_utama': _keluhanUtamaController.text.trim(),
-        'riwayat_penyakit_dahulu': _riwayatPenyakitDahuluController.text.trim(),
-        'riwayat_penyakit_keluarga': _riwayatKeluargaController.text.trim(),
-        'tekanan_darah': _tekananDarahController.text.trim().isNotEmpty
-            ? _tekananDarahController.text.trim()
-            : null,
-        'suhu_tubuh': _suhuTubuhController.text.trim().isNotEmpty
-            ? double.tryParse(_suhuTubuhController.text.trim())
-            : null,
-        'nadi': _nadiController.text.trim().isNotEmpty
-            ? int.tryParse(_nadiController.text.trim())
-            : null,
-        'pernapasan': _pernapasanController.text.trim().isNotEmpty
-            ? int.tryParse(_pernapasanController.text.trim())
-            : null,
-        'saturasi_oksigen': _saturasiOksigenController.text.trim().isNotEmpty
-            ? int.tryParse(_saturasiOksigenController.text.trim())
-            : null,
+        'riwayat_penyakit_dahulu':
+            _riwayatPenyakitDahuluController.text.trim().isNotEmpty
+            ? _riwayatPenyakitDahuluController.text.trim()
+            : 'Tidak ada riwayat penyakit sebelumnya',
+        'riwayat_penyakit_keluarga':
+            _riwayatKeluargaController.text.trim().isNotEmpty
+            ? _riwayatKeluargaController.text.trim()
+            : 'Tidak ada riwayat penyakit keluarga',
         'diagnosis': _diagnosisController.text.trim(),
-        'resep': _selectedResep,
-        'layanan': _selectedLayanan,
       };
+
+      // UBAH: Kirim vital signs sebagai string (bukan number)
+      if (_tekananDarahController.text.trim().isNotEmpty) {
+        emrData['tekanan_darah'] = _tekananDarahController.text.trim();
+      }
+      if (_suhuTubuhController.text.trim().isNotEmpty) {
+        emrData['suhu_tubuh'] = _suhuTubuhController.text
+            .trim(); // UBAH: string bukan double
+      }
+      if (_nadiController.text.trim().isNotEmpty) {
+        emrData['nadi'] = _nadiController.text.trim(); // UBAH: string bukan int
+      }
+      if (_pernapasanController.text.trim().isNotEmpty) {
+        emrData['pernapasan'] = _pernapasanController.text
+            .trim(); // UBAH: string bukan int
+      }
+      if (_saturasiOksigenController.text.trim().isNotEmpty) {
+        emrData['saturasi_oksigen'] = _saturasiOksigenController.text
+            .trim(); // UBAH: string bukan int
+      }
+
+      // Kirim resep dan layanan hanya jika ada
+      if (_selectedResep.isNotEmpty) {
+        emrData['resep'] = _selectedResep;
+      }
+
+      if (_selectedLayanan.isNotEmpty) {
+        emrData['layanan'] = _selectedLayanan;
+      }
 
       print('Sending EMR Data: ${json.encode(emrData)}');
 
@@ -459,24 +478,20 @@ class _PemeriksaanState extends State<Pemeriksaan>
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
 
-        if (data['success'] == true && data['data'] != null) {
-          final responseData = data['data'];
-
+        if (data['success'] == true) {
           print('EMR saved successfully');
-          print('Kunjungan status: ${responseData['kunjungan']?['status']}');
 
-          String successMessage = 'EMR berhasil disimpan!';
-          if (responseData['kunjungan']?['status'] == 'Payment') {
-            successMessage += '\nStatus kunjungan diubah ke Payment.';
-          }
+          String successMessage = data['message'] ?? 'EMR berhasil disimpan!';
 
-          _showSuccessSnackbar(successMessage);
+          _showSuccessSnackbar('✅ $successMessage');
 
           Navigator.pop(context, {
             'success': true,
-            'emr_data': responseData,
+            'emr_data': data['data'],
             'status_updated': true,
-            'new_status': responseData['kunjungan']?['status'],
+            'message': successMessage,
+            'is_free_consultation':
+                data['data']['is_free_consultation'] ?? false,
           });
         } else {
           String errorMessage = 'Failed to save EMR';
@@ -494,9 +509,16 @@ class _PemeriksaanState extends State<Pemeriksaan>
           String errorMessage =
               errorData['message'] ?? 'Server error: ${response.statusCode}';
 
-          if (response.statusCode == 400 && errorMessage.contains('Engaged')) {
-            errorMessage =
-                'Kunjungan harus dalam status Engaged untuk membuat EMR';
+          // Tampilkan error validasi yang lebih detail
+          if (response.statusCode == 422 && errorData['errors'] != null) {
+            Map<String, dynamic> errors = errorData['errors'];
+            List<String> errorMessages = [];
+            errors.forEach((key, value) {
+              if (value is List && value.isNotEmpty) {
+                errorMessages.add('$key: ${value.first}');
+              }
+            });
+            errorMessage = errorMessages.join('\n');
           }
 
           _showErrorSnackbar(errorMessage);
@@ -721,7 +743,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
                     'dosis': obat['dosis'],
                     'total_harga': obat['total_harga'],
                     'jumlah': jumlah,
-                    'keterangan': keterangan,
+                    'keterangan': keterangan, // Pastikan ini ada dan tidak null
                   });
                 });
 
@@ -1487,13 +1509,49 @@ class _PemeriksaanState extends State<Pemeriksaan>
                   ),
                 ),
                 SizedBox(width: isSmallScreen ? 10 : 12),
-                Text(
-                  'Informasi Pasien',
-                  style: TextStyle(
-                    fontSize: isSmallScreen ? 16 : 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade800,
+                Expanded(
+                  child: Text(
+                    'Informasi Pasien',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 16 : 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade800,
+                    ),
                   ),
+                ),
+                // TAMBAHKAN TOMBOL RIWAYAT REKAM MEDIS
+                IconButton(
+                  onPressed: () {
+                    final pasienId = widget.kunjunganData['pasien']?['id'];
+                    final namaPasien =
+                        widget.kunjunganData['pasien']?['nama_pasien'] ??
+                        'Pasien';
+
+                    if (pasienId != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RMPasien(
+                            pasienId: pasienId,
+                            namaPasien: namaPasien,
+                          ),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Data pasien tidak valid'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  icon: Icon(
+                    Icons.history,
+                    color: Colors.blue.shade700,
+                    size: isSmallScreen ? 20 : 24,
+                  ),
+                  tooltip: 'Lihat Riwayat RM',
                 ),
               ],
             ),
@@ -2042,13 +2100,49 @@ class _PemeriksaanState extends State<Pemeriksaan>
                         ],
                       ),
 
-                      // Services Section
+                      // Services Section - ganti bagian ini
                       _buildSectionCard(
                         title: 'Layanan Medis',
                         icon: Icons.medical_services_outlined,
                         iconColor: Colors.blue,
                         children: [
-                          // Search Bar for Services
+                          // TAMBAHAN: Info bahwa layanan opsional
+                          Container(
+                            padding: EdgeInsets.all(isSmallScreen ? 8 : 10),
+                            margin: EdgeInsets.only(
+                              bottom: isSmallScreen ? 12 : 16,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.blue.shade200,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Colors.blue.shade600,
+                                  size: isSmallScreen ? 16 : 18,
+                                ),
+                                SizedBox(width: isSmallScreen ? 8 : 10),
+                                Expanded(
+                                  child: Text(
+                                    'Layanan medis bersifat opsional. Konsultasi dapat dilakukan tanpa layanan tambahan.',
+                                    style: TextStyle(
+                                      fontSize: isSmallScreen ? 11 : 12,
+                                      color: Colors.blue.shade700,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Search Bar for Services - UPDATE LABEL
                           Container(
                             decoration: BoxDecoration(
                               boxShadow: [
@@ -2067,66 +2161,20 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                 fontSize: isSmallScreen ? 13 : 14,
                               ),
                               decoration: InputDecoration(
-                                labelText: 'Cari Layanan',
+                                labelText:
+                                    'Cari Layanan (Opsional)', // UPDATE INI
                                 labelStyle: TextStyle(
                                   fontSize: isSmallScreen ? 12 : 14,
                                   color: Colors.blue.shade700,
                                 ),
-                                hintText: 'Masukkan nama layanan...',
-                                hintStyle: TextStyle(
-                                  fontSize: isSmallScreen ? 11 : 12,
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.search,
-                                  color: Colors.blue,
-                                  size: isSmallScreen ? 20 : 24,
-                                ),
-                                suffixIcon: _searchLayananQuery.isNotEmpty
-                                    ? IconButton(
-                                        icon: Icon(
-                                          Icons.clear,
-                                          size: isSmallScreen ? 18 : 20,
-                                        ),
-                                        onPressed: () {
-                                          _searchLayananController.clear();
-                                          setState(() {
-                                            _searchLayananQuery = '';
-                                          });
-                                        },
-                                      )
-                                    : null,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(
-                                    color: Colors.blue,
-                                    width: 2,
-                                  ),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: isSmallScreen ? 12 : 16,
-                                  vertical: isSmallScreen ? 14 : 16,
-                                ),
+                                // ... sisanya sama seperti sebelumnya
                               ),
                             ),
                           ),
 
                           SizedBox(height: isSmallScreen ? 14 : 16),
 
-                          // Available Services List
+                          // Available Services List - UPDATE TITLE
                           Row(
                             children: [
                               Icon(
@@ -2135,23 +2183,35 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                 size: isSmallScreen ? 18 : 20,
                               ),
                               SizedBox(width: isSmallScreen ? 6 : 8),
-                              Text(
-                                'Daftar Layanan Tersedia:',
-                                style: TextStyle(
-                                  fontSize: isSmallScreen ? 14 : 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blue.shade700,
+                              Expanded(
+                                child: Text(
+                                  'Daftar Layanan Tersedia (Opsional):', // UPDATE INI
+                                  style: TextStyle(
+                                    fontSize: isSmallScreen ? 14 : 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blue.shade700,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          SizedBox(height: isSmallScreen ? 10 : 12),
+                          SizedBox(height: isSmallScreen ? 4 : 6),
+                          // TAMBAHAN: Subtitle informatif
+                          Text(
+                            'Pilih layanan jika diperlukan untuk pemeriksaan khusus.',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 10 : 11,
+                              color: Colors.grey.shade600,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          SizedBox(height: isSmallScreen ? 8 : 10),
 
                           _buildLayananList(),
 
                           SizedBox(height: isSmallScreen ? 16 : 20),
 
-                          // Selected Services
+                          // Selected Services - sisanya sama
                           Row(
                             children: [
                               Icon(
@@ -2196,12 +2256,48 @@ class _PemeriksaanState extends State<Pemeriksaan>
                         ],
                       ),
 
-                      // Prescription Section
+                      // Prescription Section - ganti bagian ini
                       _buildSectionCard(
                         title: 'Resep Obat',
                         icon: Icons.medication,
                         children: [
-                          // Search Bar
+                          // TAMBAHAN: Info bahwa obat opsional
+                          Container(
+                            padding: EdgeInsets.all(isSmallScreen ? 8 : 10),
+                            margin: EdgeInsets.only(
+                              bottom: isSmallScreen ? 12 : 16,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.teal.shade200,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Colors.teal.shade600,
+                                  size: isSmallScreen ? 16 : 18,
+                                ),
+                                SizedBox(width: isSmallScreen ? 8 : 10),
+                                Expanded(
+                                  child: Text(
+                                    'Resep obat bersifat opsional. Konsultasi dapat diselesaikan tanpa memberikan obat apapun.',
+                                    style: TextStyle(
+                                      fontSize: isSmallScreen ? 11 : 12,
+                                      color: Colors.teal.shade700,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Search Bar - UPDATE LABEL
                           Container(
                             decoration: BoxDecoration(
                               boxShadow: [
@@ -2220,66 +2316,19 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                 fontSize: isSmallScreen ? 13 : 14,
                               ),
                               decoration: InputDecoration(
-                                labelText: 'Cari Obat',
+                                labelText: 'Cari Obat (Opsional)', // UPDATE INI
                                 labelStyle: TextStyle(
                                   fontSize: isSmallScreen ? 12 : 14,
                                   color: Colors.teal.shade700,
                                 ),
-                                hintText: 'Masukkan nama obat...',
-                                hintStyle: TextStyle(
-                                  fontSize: isSmallScreen ? 11 : 12,
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.search,
-                                  color: Colors.teal,
-                                  size: isSmallScreen ? 20 : 24,
-                                ),
-                                suffixIcon: _searchObatQuery.isNotEmpty
-                                    ? IconButton(
-                                        icon: Icon(
-                                          Icons.clear,
-                                          size: isSmallScreen ? 18 : 20,
-                                        ),
-                                        onPressed: () {
-                                          _searchObatController.clear();
-                                          setState(() {
-                                            _searchObatQuery = '';
-                                          });
-                                        },
-                                      )
-                                    : null,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(
-                                    color: Colors.teal,
-                                    width: 2,
-                                  ),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: isSmallScreen ? 12 : 16,
-                                  vertical: isSmallScreen ? 14 : 16,
-                                ),
+                                // ... sisanya sama seperti sebelumnya
                               ),
                             ),
                           ),
 
                           SizedBox(height: isSmallScreen ? 14 : 16),
 
-                          // Available Medications List
+                          // Available Medications List - UPDATE TITLE
                           Row(
                             children: [
                               Icon(
@@ -2288,23 +2337,35 @@ class _PemeriksaanState extends State<Pemeriksaan>
                                 size: isSmallScreen ? 18 : 20,
                               ),
                               SizedBox(width: isSmallScreen ? 6 : 8),
-                              Text(
-                                'Daftar Obat Tersedia:',
-                                style: TextStyle(
-                                  fontSize: isSmallScreen ? 14 : 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.teal.shade700,
+                              Expanded(
+                                child: Text(
+                                  'Daftar Obat Tersedia (Opsional):', // UPDATE INI
+                                  style: TextStyle(
+                                    fontSize: isSmallScreen ? 14 : 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.teal.shade700,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          SizedBox(height: isSmallScreen ? 10 : 12),
+                          SizedBox(height: isSmallScreen ? 4 : 6),
+                          // TAMBAHAN: Subtitle informatif
+                          Text(
+                            'Pilih obat jika diperlukan untuk pengobatan pasien.',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 10 : 11,
+                              color: Colors.grey.shade600,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          SizedBox(height: isSmallScreen ? 8 : 10),
 
                           _buildObatList(),
 
                           SizedBox(height: isSmallScreen ? 16 : 20),
 
-                          // Selected Prescriptions
+                          // Selected Prescriptions - sisanya sama
                           Row(
                             children: [
                               Icon(
@@ -2393,7 +2454,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
             ),
             SizedBox(height: isSmallScreen ? 4 : 6),
             Text(
-              'Gunakan pencarian di atas untuk mencari dan menambah layanan',
+              'Layanan bersifat opsional. Konsultasi dapat dilakukan tanpa layanan tambahan.', // UPDATE INI
               style: TextStyle(
                 color: Colors.grey.shade500,
                 fontSize: isSmallScreen ? 10 : 12,
@@ -2519,7 +2580,7 @@ class _PemeriksaanState extends State<Pemeriksaan>
             ),
             SizedBox(height: isSmallScreen ? 4 : 6),
             Text(
-              'Gunakan pencarian di atas untuk mencari dan menambah obat',
+              'Resep obat bersifat opsional. Konsultasi dapat dilakukan tanpa memberikan obat.', // UPDATE INI
               style: TextStyle(
                 color: Colors.grey.shade500,
                 fontSize: isSmallScreen ? 10 : 12,

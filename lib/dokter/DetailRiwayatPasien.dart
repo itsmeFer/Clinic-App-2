@@ -13,7 +13,7 @@ class DetailRiwayatPasienPage extends StatefulWidget {
 }
 
 class _DetailRiwayatPasienPageState extends State<DetailRiwayatPasienPage> {
-  static const String baseUrl = 'https://admin.royal-klinik.cloud/api';
+  static const String baseUrl = 'http://192.168.1.6:8000/api';
 
   bool isLoading = true;
   String? errorMessage;
@@ -226,7 +226,7 @@ class _DetailRiwayatPasienPageState extends State<DetailRiwayatPasienPage> {
                   border: Border.all(color: Colors.white.withOpacity(.85), width: 2),
                   image: (foto != null)
                       ? DecorationImage(
-                          image: NetworkImage('https://admin.royal-klinik.cloud/storage/$foto'),
+                          image: NetworkImage('http://192.168.1.6:8000/storage/$foto'),
                           fit: BoxFit.cover,
                         )
                       : null,

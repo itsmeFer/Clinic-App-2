@@ -105,7 +105,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     try {
       final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/login'),
+        Uri.parse('http://192.168.1.6:8000/api/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -135,7 +135,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         if (role == 'pasien') {
           try {
             final profileResponse = await http.get(
-              Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+              Uri.parse('http://192.168.1.6:8000/api/pasien/profile'),
               headers: {
                 'Authorization': 'Bearer $token',
                 'Content-Type': 'application/json',
@@ -158,7 +158,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           await prefs.setString('dokter_token', token);
           // sanity check: pastikan token valid untuk route dokter
           final meRes = await http.get(
-            Uri.parse('https://admin.royal-klinik.cloud/api/dokter/get-data-dokter'),
+            Uri.parse('http://192.168.1.6:8000/api/dokter/get-data-dokter'),
             headers: {
               'Authorization': 'Bearer $token',
               'Accept': 'application/json',
@@ -241,7 +241,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _loginAsDokter(String username, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('https://admin.royal-klinik.cloud/api/login-dokter'),
+        Uri.parse('http://192.168.1.6:8000/api/login-dokter'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -325,7 +325,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       await prefs.setInt('user_id', data['data']['user']['id']);
 
       final profileResponse = await http.get(
-        Uri.parse('https://admin.royal-klinik.cloud/api/pasien/profile'),
+        Uri.parse('http://192.168.1.6:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer ${data['data']['token']}',
           'Content-Type': 'application/json',

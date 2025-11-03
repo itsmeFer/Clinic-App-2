@@ -68,7 +68,7 @@ class _PembayaranState extends State<Pembayaran> {
               Center(
                 child: InteractiveViewer(
                   child: Image.network(
-                    'https://admin.royal-klinik.cloud/storage/$buktiPembayaran',
+                    'http://192.168.1.6:8000/storage/$buktiPembayaran',
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
@@ -147,7 +147,7 @@ class _PembayaranState extends State<Pembayaran> {
 
       final response = await http.get(
         Uri.parse(
-          'https://admin.royal-klinik.cloud/api/pembayaran/get-data-metode-pembayaran',
+          'http://192.168.1.6:8000/api/pembayaran/get-data-metode-pembayaran',
         ),
         headers: {
           'Authorization': 'Bearer $token',
@@ -235,11 +235,11 @@ class _PembayaranState extends State<Pembayaran> {
 
       if (selectedKunjunganId != null && fromListPayment) {
         url =
-            'https://admin.royal-klinik.cloud/api/pembayaran/detail/$selectedKunjunganId';
+            'http://192.168.1.6:8000/api/pembayaran/detail/$selectedKunjunganId';
         debugInfo = 'Using selectedKunjunganId from SharedPreferences';
       } else if (widget.kunjunganId != null) {
         url =
-            'https://admin.royal-klinik.cloud/api/pembayaran/detail/${widget.kunjunganId}';
+            'http://192.168.1.6:8000/api/pembayaran/detail/${widget.kunjunganId}';
         debugInfo = 'Using kunjunganId from constructor';
       } else {
         if (pasienId == null) {
@@ -250,7 +250,7 @@ class _PembayaranState extends State<Pembayaran> {
           });
           return;
         }
-        url = 'https://admin.royal-klinik.cloud/api/pembayaran/pasien/$pasienId';
+        url = 'http://192.168.1.6:8000/api/pembayaran/pasien/$pasienId';
         debugInfo = 'Using pasienId fallback';
       }
 
@@ -296,7 +296,7 @@ class _PembayaranState extends State<Pembayaran> {
       print('🔍 Fetching medicine payment data for: $kodeTransaksi');
 
       final url =
-          'https://admin.royal-klinik.cloud/api/penjualan-obat/detail/$kodeTransaksi';
+          'http://192.168.1.6:8000/api/penjualan-obat/detail/$kodeTransaksi';
       final response = await http.get(
         Uri.parse(url),
         headers: {
@@ -1168,7 +1168,7 @@ Terima kasih telah menggunakan layanan Royal Clinic!
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Image.network(
-                  'https://admin.royal-klinik.cloud/storage/$buktiPembayaran',
+                  'http://192.168.1.6:8000/storage/$buktiPembayaran',
                   width: double.infinity,
                   height: 200,
                   fit: BoxFit.cover,
