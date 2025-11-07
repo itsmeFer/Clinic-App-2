@@ -21,9 +21,19 @@ class _DokterDashboardState extends State<DokterDashboard> {
 
   Map<String, dynamic>? dokterData;
   List<dynamic> kunjunganEngaged = [];
+  List<dynamic> allKunjungan = []; // ✅ Simpan semua data untuk filter
 
   // KPI yang dipakai
   Map<String, int> statistik = {'janji_hari_ini': 0, 'antrian_aktif': 0};
+
+  // ✅ Filter states
+  String selectedNameFilter = 'Semua'; // A-Z + Terbaru
+  String selectedPoliFilter = 'Semua Poli';
+  String searchQuery = '';
+  List<String> availablePoliFilters = ['Semua Poli'];
+  List<String> availableNameFilters = ['Semua', 'Terbaru', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+  
+  final TextEditingController _searchController = TextEditingController();
 
   // ---------- Helpers ----------
   void setStateSafe(VoidCallback fn) {
@@ -84,11 +94,150 @@ class _DokterDashboardState extends State<DokterDashboard> {
     return count;
   }
 
+  // ✅ Update available filter options
+  void _updateAvailableFilters() {
+    final Set<String> poliNames = {'Semua Poli'};
+    
+    // ✅ PERBAIKAN: Ambil dari data dokter, bukan dari kunjungan
+    if (dokterData != null && dokterData!['all_poli'] != null) {
+      final allPoliList = dokterData!['all_poli'] as List;
+      for (final poli in allPoliList) {
+        if (poli is Map && poli['nama_poli'] != null) {
+          poliNames.add(poli['nama_poli'].toString());
+        }
+      }
+    }
+    
+    // ✅ FALLBACK: Jika tidak ada dari dokter data, ambil dari kunjungan
+    if (poliNames.length == 1) { // Hanya ada 'Semua Poli'
+      for (final kunjungan in allKunjungan) {
+        final poliName = kunjungan['poli']?['nama_poli']?.toString();
+        if (poliName != null && poliName.isNotEmpty) {
+          poliNames.add(poliName);
+        }
+      }
+    }
+    
+    setStateSafe(() {
+      availablePoliFilters = poliNames.toList();
+    });
+    
+    print('🏥 Available Poli Filters: $availablePoliFilters'); // Debug log
+  }
+
+  // ✅ Apply filters to data
+  void _applyFilters() {
+    List<dynamic> filtered = List.from(allKunjungan);
+    
+    // Filter berdasarkan huruf nama pasien atau terbaru
+    if (selectedNameFilter != 'Semua') {
+      if (selectedNameFilter == 'Terbaru') {
+        // Sort berdasarkan tanggal terbaru (created_at)
+        filtered.sort((a, b) {
+          try {
+            final dateA = DateTime.parse(a['created_at']?.toString() ?? '2000-01-01').toLocal();
+            final dateB = DateTime.parse(b['created_at']?.toString() ?? '2000-01-01').toLocal();
+            return dateB.compareTo(dateA); // Terbaru dulu
+          } catch (e) {
+            return 0;
+          }
+        });
+      } else {
+        // Filter berdasarkan huruf awal nama pasien
+        filtered = filtered.where((k) {
+          final nama = k['pasien']?['nama_pasien']?.toString() ?? '';
+          if (nama.isEmpty) return false;
+          return nama.toUpperCase().startsWith(selectedNameFilter);
+        }).toList();
+        
+        // Sort alphabetical untuk filter huruf
+        filtered.sort((a, b) {
+          final namaA = a['pasien']?['nama_pasien']?.toString() ?? '';
+          final namaB = b['pasien']?['nama_pasien']?.toString() ?? '';
+          return namaA.compareTo(namaB);
+        });
+      }
+    } else {
+      // Default sort berdasarkan no_antrian
+      filtered.sort((a, b) {
+        final noA = int.tryParse(a['no_antrian']?.toString() ?? '0') ?? 0;
+        final noB = int.tryParse(b['no_antrian']?.toString() ?? '0') ?? 0;
+        return noA.compareTo(noB);
+      });
+    }
+    
+    // Filter berdasarkan poli
+    if (selectedPoliFilter != 'Semua Poli') {
+      filtered = filtered.where((k) {
+        final poliName = k['poli']?['nama_poli']?.toString();
+        return poliName == selectedPoliFilter;
+      }).toList();
+    }
+    
+    // Filter berdasarkan search query
+    if (searchQuery.isNotEmpty) {
+      final query = searchQuery.toLowerCase();
+      filtered = filtered.where((k) {
+        final nama = k['pasien']?['nama_pasien']?.toString().toLowerCase() ?? '';
+        final keluhan = k['keluhan_awal']?.toString().toLowerCase() ?? '';
+        final noAntrian = k['no_antrian']?.toString().toLowerCase() ?? '';
+        
+        return nama.contains(query) || 
+               keluhan.contains(query) || 
+               noAntrian.contains(query);
+      }).toList();
+    }
+    
+    setStateSafe(() {
+      kunjunganEngaged = filtered;
+    });
+    
+    _calculateStatistik();
+  }
+
+  // ✅ Reset filters
+  void _resetFilters() {
+    setStateSafe(() {
+      selectedNameFilter = 'Semua';
+      selectedPoliFilter = 'Semua Poli';
+      searchQuery = '';
+      _searchController.clear();
+    });
+    _applyFilters();
+  }
+
+  // ✅ Get Active Filters Text
+  String _getActiveFiltersText() {
+    List<String> activeFilters = [];
+    
+    if (selectedNameFilter != 'Semua') {
+      if (selectedNameFilter == 'Terbaru') {
+        activeFilters.add('Urutkan: Terbaru');
+      } else {
+        activeFilters.add('Huruf: $selectedNameFilter');
+      }
+    }
+    if (selectedPoliFilter != 'Semua Poli') {
+      activeFilters.add(selectedPoliFilter);
+    }
+    if (searchQuery.isNotEmpty) {
+      activeFilters.add('Pencarian: "$searchQuery"');
+    }
+    
+    return activeFilters.join(', ');
+  }
+
   // ---------- Lifecycle ----------
   @override
   void initState() {
     super.initState();
     _loadDashboardData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   // ---------- Data fetching ----------
@@ -114,6 +263,9 @@ class _DokterDashboardState extends State<DokterDashboard> {
       if (!mounted) return;
 
       if (dokterData != null) {
+        // ✅ PERBAIKAN: Update filters setelah load dokter profile
+        _updateAvailableFilters();
+        
         await _loadKunjunganEngaged();
         if (!mounted) return;
       }
@@ -145,19 +297,52 @@ class _DokterDashboardState extends State<DokterDashboard> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('📊 Raw dokter data: ${data['Data Dokter']}');
+        
         if (data['success'] == true &&
             data['Data Dokter'] is List &&
             data['Data Dokter'].isNotEmpty) {
           final first = (data['Data Dokter'] as List).first;
-          setStateSafe(() => dokterData = first);
-          await _saveDoctorIdIfAny(first);
+          print('📊 First dokter: $first');
+          print('📊 Poli data: ${first['poli']}');
+          print('📊 All poli: ${first['all_poli']}');
+          print('📊 Spesialis: ${first['jenis_spesialis']}');
+          
+          // ✅ PERBAIKAN: Buat copy mutable dari Map dan semua nested maps
+          final mutableDokterData = _deepCopyMap(first);
+          
+          setStateSafe(() => dokterData = mutableDokterData);
+          await _saveDoctorIdIfAny(mutableDokterData);
         }
       } else if (response.statusCode == 401) {
         await _handleTokenExpired();
       }
     } catch (e) {
+      print('❌ Error loading dokter profile: $e');
       // Handle error silently
     }
+  }
+
+  // ✅ Helper function untuk deep copy Map
+  Map<String, dynamic> _deepCopyMap(Map<String, dynamic> original) {
+    Map<String, dynamic> copy = {};
+    
+    original.forEach((key, value) {
+      if (value is Map<String, dynamic>) {
+        copy[key] = _deepCopyMap(value);
+      } else if (value is List) {
+        copy[key] = value.map((item) {
+          if (item is Map<String, dynamic>) {
+            return _deepCopyMap(item);
+          }
+          return item;
+        }).toList();
+      } else {
+        copy[key] = value;
+      }
+    });
+    
+    return copy;
   }
 
   Future<void> _loadKunjunganEngaged() async {
@@ -184,7 +369,9 @@ class _DokterDashboardState extends State<DokterDashboard> {
           final List<dynamic> kunjunganList = (data['data'] as List?) ?? [];
 
           setStateSafe(() {
-            kunjunganEngaged = kunjunganList;
+            allKunjungan = kunjunganList; // ✅ Simpan semua data
+            _updateAvailableFilters(); // ✅ Update filter options
+            _applyFilters(); // ✅ Apply filter
           });
         }
       } else if (response.statusCode == 401) {
@@ -286,6 +473,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
 
   void _onPemeriksaanCompleted(int kunjunganId) {
     setStateSafe(() {
+      allKunjungan.removeWhere((k) => k['id'] == kunjunganId);
       kunjunganEngaged.removeWhere((k) => k['id'] == kunjunganId);
     });
 
@@ -324,26 +512,8 @@ class _DokterDashboardState extends State<DokterDashboard> {
               child: LayoutBuilder(
                 builder: (context, c) {
                   final w = c.maxWidth;
-
-                  // Breakpoints
-
                   final isPhoneSmall = w < 360;
                   final isPhone = w < 600;
-                  final isTablet = w >= 600 && w < 900;
-                  final isWide = w >= 900;
-
-                  // Grid statistik adaptif (2 kartu)
-                  int statCols = 2;
-                  double statHeight;
-                  if (isPhoneSmall) {
-                    statHeight = 132;
-                  } else if (isPhone) {
-                    statHeight = 120;
-                  } else if (isTablet) {
-                    statHeight = 110;
-                  } else {
-                    statHeight = 108;
-                  }
 
                   final padding = EdgeInsets.symmetric(
                     horizontal: isPhoneSmall ? 12 : 16,
@@ -352,6 +522,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
 
                   final List<Widget> items = [];
 
+                  // Welcome Card
                   if (dokterData != null) {
                     items.add(
                       _WelcomeCard(dokter: dokterData!, onEdit: _goEditProfile),
@@ -359,6 +530,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
                     items.add(SizedBox(height: isPhone ? 16 : 20));
                   }
 
+                  // Statistics
                   items.add(
                     Text(
                       'Ringkasan',
@@ -369,11 +541,14 @@ class _DokterDashboardState extends State<DokterDashboard> {
                     ),
                   );
                   items.add(const SizedBox(height: 10));
-
                   items.add(_StatisticsChart(statistik: statistik));
-
                   items.add(SizedBox(height: isPhone ? 18 : 22));
 
+                  // ✅ Filter Section
+                  items.add(_buildFilterSection(isPhone));
+                  items.add(SizedBox(height: isPhone ? 16 : 20));
+
+                  // Patient List Header
                   items.add(
                     Wrap(
                       alignment: WrapAlignment.spaceBetween,
@@ -382,7 +557,7 @@ class _DokterDashboardState extends State<DokterDashboard> {
                       runSpacing: 8,
                       children: [
                         ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: w * 0.7),
+                          constraints: BoxConstraints(maxWidth: w * 0.6),
                           child: Text(
                             'Pasien Sedang Ditangani',
                             overflow: TextOverflow.ellipsis,
@@ -396,18 +571,35 @@ class _DokterDashboardState extends State<DokterDashboard> {
                           text: '${kunjunganEngaged.length} pasien',
                           color: Colors.green,
                         ),
+                        // ✅ Reset Filter Button
+                        if (selectedNameFilter != 'Semua' || 
+                            selectedPoliFilter != 'Semua Poli' || 
+                            searchQuery.isNotEmpty)
+                          IconButton(
+                            onPressed: _resetFilters,
+                            icon: Icon(
+                              Icons.filter_alt_off,
+                              color: Colors.orange.shade600,
+                              size: isPhone ? 20 : 24,
+                            ),
+                            tooltip: 'Reset Filter',
+                          ),
                       ],
                     ),
                   );
                   items.add(const SizedBox(height: 10));
 
+                  // Patient List
                   if (kunjunganEngaged.isEmpty) {
                     items.add(
-                      const _EmptyCard(
+                      _EmptyCard(
                         icon: Icons.medical_services_outlined,
-                        title: 'Tidak ada pasien yang sedang ditangani',
-                        subtitle:
-                            'Pasien akan muncul di sini setelah status menjadi "Engaged".',
+                        title: allKunjungan.isEmpty 
+                            ? 'Tidak ada pasien yang sedang ditangani'
+                            : 'Tidak ada pasien yang sesuai filter',
+                        subtitle: allKunjungan.isEmpty
+                            ? 'Pasien akan muncul di sini setelah status menjadi "Engaged".'
+                            : 'Coba ubah filter atau reset untuk melihat semua data.',
                       ),
                     );
                   } else {
@@ -435,6 +627,257 @@ class _DokterDashboardState extends State<DokterDashboard> {
                 },
               ),
             ),
+    );
+  }
+
+  // ✅ Build Filter Section
+  Widget _buildFilterSection(bool isPhone) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isPhone ? 14 : 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section Header
+            Row(
+              children: [
+                Icon(
+                  Icons.filter_list,
+                  color: Colors.blue.shade600,
+                  size: isPhone ? 18 : 20,
+                ),
+                SizedBox(width: isPhone ? 6 : 8),
+                Text(
+                  'Filter & Pencarian Pasien',
+                  style: TextStyle(
+                    fontSize: isPhone ? 14 : 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: isPhone ? 12 : 16),
+
+            // Search Bar
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Cari nama pasien, keluhan, atau no antrian...',
+                hintStyle: TextStyle(fontSize: isPhone ? 12 : 14),
+                prefixIcon: Icon(
+                  Icons.search,
+                  size: isPhone ? 18 : 20,
+                  color: Colors.grey.shade600,
+                ),
+                suffixIcon: searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.clear,
+                          size: isPhone ? 18 : 20,
+                        ),
+                        onPressed: () {
+                          _searchController.clear();
+                          setStateSafe(() => searchQuery = '');
+                          _applyFilters();
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: Colors.blue.shade400, width: 2),
+                ),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isPhone ? 12 : 16,
+                  vertical: isPhone ? 10 : 12,
+                ),
+              ),
+              style: TextStyle(fontSize: isPhone ? 12 : 14),
+              onChanged: (value) {
+                setStateSafe(() => searchQuery = value);
+                _applyFilters();
+              },
+            ),
+
+            SizedBox(height: isPhone ? 12 : 16),
+
+            // Filter Dropdowns
+            if (isPhone) ...[
+              // Mobile Layout - Vertical
+              _buildFilterDropdown(
+                'Urut Berdasarkan Nama',
+                selectedNameFilter,
+                availableNameFilters,
+                (value) {
+                  setStateSafe(() => selectedNameFilter = value!);
+                  _applyFilters();
+                },
+                isPhone,
+                helpText: 'Pilih huruf awal nama pasien atau urutkan terbaru',
+              ),
+              const SizedBox(height: 12),
+              _buildFilterDropdown(
+                'Filter Poli',
+                selectedPoliFilter,
+                availablePoliFilters,
+                (value) {
+                  setStateSafe(() => selectedPoliFilter = value!);
+                  _applyFilters();
+                },
+                isPhone,
+                helpText: 'Tampilkan pasien dari poli tertentu',
+              ),
+            ] else ...[
+              // Desktop/Tablet Layout - Horizontal
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildFilterDropdown(
+                      'Urut Berdasarkan Nama',
+                      selectedNameFilter,
+                      availableNameFilters,
+                      (value) {
+                        setStateSafe(() => selectedNameFilter = value!);
+                        _applyFilters();
+                      },
+                      isPhone,
+                      helpText: 'Pilih huruf awal nama pasien atau urutkan terbaru',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildFilterDropdown(
+                      'Filter Poli',
+                      selectedPoliFilter,
+                      availablePoliFilters,
+                      (value) {
+                        setStateSafe(() => selectedPoliFilter = value!);
+                        _applyFilters();
+                      },
+                      isPhone,
+                      helpText: 'Tampilkan pasien dari poli tertentu',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            // Active Filters Info
+            if (selectedNameFilter != 'Semua' || 
+                selectedPoliFilter != 'Semua Poli' || 
+                searchQuery.isNotEmpty) ...[
+              SizedBox(height: isPhone ? 10 : 12),
+              Container(
+                padding: EdgeInsets.all(isPhone ? 8 : 10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.blue.shade600,
+                      size: isPhone ? 14 : 16,
+                    ),
+                    SizedBox(width: isPhone ? 6 : 8),
+                    Expanded(
+                      child: Text(
+                        'Filter aktif: ${_getActiveFiltersText()}',
+                        style: TextStyle(
+                          fontSize: isPhone ? 10 : 12,
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✅ Build Filter Dropdown
+  Widget _buildFilterDropdown(
+    String label,
+    String value,
+    List<String> items,
+    ValueChanged<String?> onChanged,
+    bool isPhone, {
+    String? helpText,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: isPhone ? 12 : 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
+          ),
+        ),
+        if (helpText != null) ...[
+          SizedBox(height: isPhone ? 2 : 4),
+          Text(
+            helpText,
+            style: TextStyle(
+              fontSize: isPhone ? 10 : 11,
+              color: Colors.grey.shade500,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+        SizedBox(height: isPhone ? 4 : 6),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: isPhone ? 10 : 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              items: items.map((String item) {
+                return DropdownMenuItem<String>(
+                  value: item,
+                  child: Text(
+                    item,
+                    style: TextStyle(
+                      fontSize: isPhone ? 12 : 14,
+                      fontWeight: item == 'Terbaru' ? FontWeight.w600 : FontWeight.normal,
+                      color: item == 'Terbaru' ? Colors.orange.shade700 : Colors.black87,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: onChanged,
+              icon: Icon(
+                Icons.keyboard_arrow_down,
+                color: Colors.grey.shade600,
+                size: isPhone ? 18 : 20,
+              ),
+              style: TextStyle(
+                color: Colors.black87,
+                fontSize: isPhone ? 12 : 14,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -486,7 +929,6 @@ class _DokterDashboardState extends State<DokterDashboard> {
             backgroundColor: Colors.white,
             backgroundImage: AssetImage("assets/gambar/logo.png"),
           ),
-
           const SizedBox(width: 10),
           Text(
             'Dashboard Dokter',
@@ -553,7 +995,28 @@ class _WelcomeCard extends StatelessWidget {
     final isSmall = MediaQuery.of(context).size.width < 400;
     final foto = dokter['foto_dokter'];
     final nama = dokter['nama_dokter'] ?? 'Dokter';
-    final spesialis = dokter['poli']?['nama_poli'] ?? 'Umum';
+    
+    // ✅ AMBIL SEMUA POLI DAN SPESIALIS
+    String spesialisInfo = '';
+    List<String> poliNames = [];
+    
+    try {
+      // Ambil spesialis
+      if (dokter['jenis_spesialis'] != null && dokter['jenis_spesialis'] is Map) {
+        spesialisInfo = dokter['jenis_spesialis']['nama_spesialis']?.toString() ?? '';
+      }
+      
+      // Ambil semua poli
+      if (dokter['all_poli'] != null && dokter['all_poli'] is List) {
+        final allPoliList = dokter['all_poli'] as List;
+        poliNames = allPoliList
+            .where((poli) => poli is Map && poli['nama_poli'] != null)
+            .map((poli) => poli['nama_poli'].toString())
+            .toList();
+      }
+    } catch (e) {
+      print('⚠️ Error processing dokter data: $e');
+    }
 
     return Card(
       elevation: 3,
@@ -568,68 +1031,145 @@ class _WelcomeCard extends StatelessWidget {
             end: Alignment.bottomRight,
           ),
         ),
-        child: Row(
+        child: Column(
           children: [
-            CircleAvatar(
-              radius: isSmall ? 26 : 30,
-              backgroundColor: Colors.white,
-              child: ClipOval(
-                child: SafeNetworkImage(
-                  url: (foto != null)
-                      ? 'http://192.168.1.6:8000/storage/$foto'
-                      : null,
-                  size: (isSmall ? 52 : 60),
-                  fallback: Icon(
-                    Icons.person,
-                    color: Colors.teal,
-                    size: isSmall ? 26 : 30,
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: isSmall ? 26 : 30,
+                  backgroundColor: Colors.white,
+                  child: ClipOval(
+                    child: SafeNetworkImage(
+                      url: (foto != null)
+                          ? 'http://192.168.1.6:8000/storage/$foto'
+                          : null,
+                      size: (isSmall ? 52 : 60),
+                      fallback: Icon(
+                        Icons.person,
+                        color: Colors.teal,
+                        size: isSmall ? 26 : 30,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            SizedBox(width: isSmall ? 12 : 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Selamat Datang,',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: isSmall ? 12 : 13,
-                    ),
+                SizedBox(width: isSmall ? 12 : 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Selamat Datang,',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: isSmall ? 12 : 13,
+                        ),
+                      ),
+                      Text(
+                        'Dr. $nama',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isSmall ? 16 : 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      // ✅ TAMPILKAN SPESIALIS
+                      if (spesialisInfo.isNotEmpty)
+                        Text(
+                          'Sp. $spesialisInfo',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: isSmall ? 11 : 12,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                    ],
                   ),
-                  Text(
-                    'Dr. $nama',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: isSmall ? 16 : 18,
-                      fontWeight: FontWeight.w700,
-                    ),
+                ),
+                IconButton(
+                  onPressed: onEdit,
+                  icon: Icon(
+                    Icons.edit,
+                    color: Colors.white,
+                    size: isSmall ? 20 : 24,
                   ),
-                  Text(
-                    spesialis,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: isSmall ? 12 : 13,
-                    ),
+                  tooltip: 'Edit Profil',
+                ),
+              ],
+            ),
+            
+            // ✅ TAMPILKAN SEMUA POLI DALAM CARD TERPISAH
+            if (poliNames.isNotEmpty) ...[
+              SizedBox(height: isSmall ? 12 : 16),
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(isSmall ? 10 : 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 1,
                   ),
-                ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.local_hospital,
+                          color: Colors.white,
+                          size: isSmall ? 14 : 16,
+                        ),
+                        SizedBox(width: isSmall ? 6 : 8),
+                        Text(
+                          'Poli yang Ditangani:',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isSmall ? 12 : 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: isSmall ? 6 : 8),
+                    // ✅ TAMPILKAN SEMUA POLI SEBAGAI CHIPS
+                    Wrap(
+                      spacing: isSmall ? 6 : 8,
+                      runSpacing: isSmall ? 4 : 6,
+                      children: poliNames.map((poliName) {
+                        return Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isSmall ? 8 : 10,
+                            vertical: isSmall ? 4 : 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.4),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            poliName,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: isSmall ? 10 : 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              onPressed: onEdit,
-              icon: Icon(
-                Icons.edit,
-                color: Colors.white,
-                size: isSmall ? 20 : 24,
-              ),
-              tooltip: 'Edit Profil',
-            ),
+            ],
           ],
         ),
       ),
@@ -963,7 +1503,10 @@ class _EmptyCard extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: isSmall ? 14 : 16),
+              style: TextStyle(
+                fontSize: isSmall ? 14 : 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             SizedBox(height: isSmall ? 6 : 8),
             Text(
@@ -1027,6 +1570,7 @@ class _PatientCard extends StatelessWidget {
     final no = data['no_antrian'] ?? '-';
     final nama = data['pasien']?['nama_pasien'] ?? 'Nama tidak tersedia';
     final keluhan = data['keluhan_awal'] ?? '-';
+    final poliName = data['poli']?['nama_poli'] ?? '-'; // ✅ TAMBAH INFO POLI
 
     final tgl = formatDate(data['tanggal_kunjungan']?.toString());
     final jam = formatTime(data['created_at']?.toString());
@@ -1077,6 +1621,12 @@ class _PatientCard extends StatelessWidget {
               children: [
                 _badge('No. $no'),
                 _badge(
+                  poliName, // ✅ TAMPILKAN NAMA POLI
+                  color: Colors.purple.withOpacity(0.1),
+                  border: Colors.purple,
+                  textColor: Colors.purple.shade700,
+                ),
+                _badge(
                   'Sedang Ditangani',
                   color: Colors.green.withOpacity(0.1),
                   border: Colors.green,
@@ -1126,6 +1676,7 @@ class _PatientCard extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
+                    Text('Poli: $poliName'), // ✅ TAMBAH INFO POLI
                     Text('Tanggal Kunjungan: $tgl'),
                     if (jam != null) Text('Waktu Daftar: $jam'),
                   ],

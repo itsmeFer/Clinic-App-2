@@ -316,92 +316,96 @@ class _PemeriksaanState extends State<Pemeriksaan>
   }
 
   Future<void> _loadAvailableLayanan() async {
+  if (!mounted) return;
+
+  setState(() {
+    _isLoadingLayanan = true;
+  });
+
+  try {
+    final token = await getToken();
+    if (token == null || token.isEmpty) {
+      _showErrorSnackbar('Token tidak ditemukan. Silakan login ulang.');
+      return;
+    }
+
+    // ✅ PERBAIKAN: Gunakan endpoint yang konsisten
+    print('🔍 Loading layanan untuk dokter');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/dokter/get-layanan'), // ✅ Endpoint sudah benar
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    );
+
     if (!mounted) return;
 
-    setState(() {
-      _isLoadingLayanan = true;
-    });
+    print('📡 Layanan response: ${response.statusCode}');
 
-    try {
-      final token = await getToken();
-      if (token == null || token.isEmpty) {
-        _showErrorSnackbar('Token tidak ditemukan. Silakan login ulang.');
-        return;
-      }
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
 
-      print('🔍 Loading SEMUA layanan (tanpa filter poli)');
+      // ✅ Handle response structure
+      final list = (body is Map && body['data'] is List)
+          ? List<Map<String, dynamic>>.from(body['data'])
+          : <Map<String, dynamic>>[];
 
-      final response = await http.get(
-        Uri.parse('$baseUrl/dokter/get-layanan'), // endpoint dokter
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      );
+      // ✅ Normalisasi data
+      final normalized = list
+          .map((e) {
+            final raw = (e['harga_layanan_raw'] ?? e['harga_layanan'] ?? '0')
+                .toString();
+            final numeric = double.tryParse(
+              raw.contains(',')
+                  ? raw.replaceAll('.', '').replaceAll(',', '.')
+                  : raw,
+            ) ?? 0.0;
 
-      if (!mounted) return;
+            return {
+              'id': e['id'],
+              'nama_layanan': e['nama_layanan'] ?? e['nama'] ?? 'Layanan',
+              'harga_layanan': numeric,
+              'poli_id': e['poli_id'], // Bisa null
+            };
+          })
+          .where((e) => e['id'] != null && e['nama_layanan'] != null)
+          .toList();
 
-      print('📡 Layanan response: ${response.statusCode} - ${response.body}');
+      setState(() {
+        _availableLayanan = normalized;
+        _cachedFilteredLayanan = null;
+      });
 
-      if (response.statusCode == 200) {
-        final body = json.decode(response.body);
-
-        // ✅ respons kamu: {"success":true,"message":"...","data":[...],"total":5}
-        final list = (body is Map && body['data'] is List)
-            ? List<Map<String, dynamic>>.from(body['data'])
-            : <Map<String, dynamic>>[];
-
-        // Normalisasi field agar UI konsisten
-        final normalized = list
-            .map((e) {
-              // Gunakan angka mentah bila ada, fallback dari string lokal "50.000,00"
-              final raw = (e['harga_layanan_raw'] ?? e['harga_layanan'] ?? '0')
-                  .toString();
-              final numeric =
-                  double.tryParse(
-                    raw.contains(',')
-                        ? raw.replaceAll('.', '').replaceAll(',', '.')
-                        : raw,
-                  ) ??
-                  0.0;
-
-              return {
-                'id': e['id'],
-                'nama_layanan': e['nama_layanan'] ?? e['nama'] ?? 'Layanan',
-                'harga_layanan':
-                    numeric, // disimpan numerik → formatter kamu aman
-                'poli_id': e['poli_id'], // boleh null
-              };
-            })
-            .where((e) => e['id'] != null && e['nama_layanan'] != null)
-            .toList();
-
-        setState(() {
-          _availableLayanan = normalized;
-          _cachedFilteredLayanan = null; // reset cache filter
-        });
-
-        print('✅ Loaded ${_availableLayanan.length} layanan (semua poli)');
-        if (_availableLayanan.isNotEmpty) {
-          print('🧪 Contoh item: ${_availableLayanan.first}');
-        }
-      } else {
-        _showErrorSnackbar('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('❌ Error loading layanan: $e');
-      if (mounted) {
-        _showErrorSnackbar('Network error: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingLayanan = false;
-        });
-      }
+      print('✅ Loaded ${_availableLayanan.length} layanan');
+      
+    } else if (response.statusCode == 403) {
+      // ✅ TAMBAHAN: Handle case jika dokter belum terdaftar di poli manapun
+      print('⚠️ Access forbidden - dokter mungkin belum terdaftar di poli');
+      setState(() {
+        _availableLayanan = [];
+      });
+      // Tidak perlu show error karena layanan memang opsional
+      
+    } else {
+      _showErrorSnackbar('Server error: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('❌ Error loading layanan: $e');
+    if (mounted) {
+      // ✅ PERBAIKAN: Error yang lebih user-friendly
+      _showErrorSnackbar('Gagal memuat layanan. Silakan coba lagi.');
+    }
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isLoadingLayanan = false;
+      });
     }
   }
+}
 
   Future<void> _saveEMR() async {
     if (!_formKey.currentState!.validate()) {
