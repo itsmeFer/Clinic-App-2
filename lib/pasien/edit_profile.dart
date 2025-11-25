@@ -102,7 +102,7 @@ Future<void> fetchDataProfile() async {
 
   try {
     final response = await http.get(
-      Uri.parse('http://192.168.1.6:8000/api/pasien/profile'),
+      Uri.parse('http://10.19.0.247:8000/api/pasien/profile'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -404,7 +404,7 @@ Future<void> fetchDataProfile() async {
 
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse('http://192.168.1.6:8000/api/pasien/update'),
+      Uri.parse('http://10.19.0.247:8000/api/pasien/update'),
     );
 
     if (token != null) {
@@ -553,7 +553,7 @@ Future<void> fetchDataProfile() async {
                       ? Image.file(selectedImage!, fit: BoxFit.cover)
                       : currentFotoUrl != null
                       ? Image.network(
-                          'http://192.168.1.6:8000/storage/$currentFotoUrl',
+                          'http://10.19.0.247:8000/storage/$currentFotoUrl',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             return _avatarPlaceholder();

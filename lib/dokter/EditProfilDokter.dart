@@ -1,126 +1,351 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // ✅ Import Font Awesome
 
-class EditProfileDokter extends StatefulWidget {
+// Import shared sidebar with prefix
+import 'Sidebar.dart' as Sidebar;
+
+class EditProfilDokter extends StatefulWidget {
   final Map<String, dynamic> dokterData;
 
-  const EditProfileDokter({Key? key, required this.dokterData}) : super(key: key);
+  const EditProfilDokter({
+    Key? key,
+    required this.dokterData,
+  }) : super(key: key);
 
   @override
-  State<EditProfileDokter> createState() => _EditProfileDokterState();
+  _EditProfilDokterState createState() => _EditProfilDokterState();
 }
 
-class _EditProfileDokterState extends State<EditProfileDokter> 
-    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
-  
-  @override
-  bool get wantKeepAlive => true;
-
+class _EditProfilDokterState extends State<EditProfilDokter> {
   final _formKey = GlobalKey<FormState>();
   final _namaController = TextEditingController();
-  final _deskripsiController = TextEditingController();
-  final _pengalamanController = TextEditingController();
   final _noHpController = TextEditingController();
-  
-  bool isLoading = false;
-  File? _imageFile;
-  final ImagePicker _picker = ImagePicker();
-  
-  List<dynamic> spesialisList = [];
-  int? selectedSpesialisId;
+  final _pengalamanController = TextEditingController();
+  final _deskripsiController = TextEditingController();
 
-  // Animation controllers
-  late AnimationController _fadeAnimationController;
-  late Animation<double> _fadeAnimation;
-  late AnimationController _scaleAnimationController;
-  late Animation<double> _scaleAnimation;
-
-  // Focus nodes for better UX
-  final List<FocusNode> _focusNodes = [];
-  final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
+  bool _isSidebarCollapsed = false;
+  Map<String, dynamic>? _currentDokterData;
+  File? _selectedImage;
+  String? _currentImageUrl;
+  List<Map<String, dynamic>> _spesialisasiList = [];
+  int? _selectedSpesialisasiId;
+  List<Map<String, dynamic>> _poliList = [];
+  List<int> _selectedPoliIds = [];
 
   @override
   void initState() {
     super.initState();
-    _initializeAnimations();
-    _initializeFocusNodes();
-    _initializeData();
-    _loadSpesialisList();
-  }
-
-  void _initializeAnimations() {
-    _fadeAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _fadeAnimationController,
-      curve: Curves.easeInOut,
-    ));
-
-    _scaleAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(
-      parent: _scaleAnimationController,
-      curve: Curves.easeInOut,
-    ));
-
-    _fadeAnimationController.forward();
-  }
-
-  void _initializeFocusNodes() {
-    for (int i = 0; i < 5; i++) {
-      _focusNodes.add(FocusNode());
-    }
-  }
-
-  void _initializeData() {
-    _namaController.text = widget.dokterData['nama_dokter'] ?? '';
-    _deskripsiController.text = widget.dokterData['deskripsi_dokter'] ?? '';
-    _pengalamanController.text = widget.dokterData['pengalaman'] ?? '';
-    _noHpController.text = widget.dokterData['no_hp'] ?? '';
-    selectedSpesialisId = widget.dokterData['jenis_spesialis_id'];
+    _currentDokterData = widget.dokterData;
+    _initializeDataAsync();
   }
 
   @override
   void dispose() {
-    _fadeAnimationController.dispose();
-    _scaleAnimationController.dispose();
     _namaController.dispose();
-    _deskripsiController.dispose();
-    _pengalamanController.dispose();
     _noHpController.dispose();
-    _scrollController.dispose();
-    for (var node in _focusNodes) {
-      node.dispose();
-    }
+    _pengalamanController.dispose();
+    _deskripsiController.dispose();
     super.dispose();
   }
 
-  Future<String?> getToken() async {
+  // ===== ASYNC INITIALIZATION =====
+  Future<void> _initializeDataAsync() async {
+    _initializeData();
+    
+    await Future.wait([
+      _loadSpesialisasi(),
+      _loadPoli(),
+    ]);
+    
+    setState(() {
+      _initializeData();
+    });
+  }
+
+  // ===== NAVIGATION HANDLERS =====
+  void _handleSidebarNavigation(Sidebar.SidebarPage page) {
+    if (page == Sidebar.SidebarPage.profilDokter) return;
+    
+    Sidebar.NavigationHelper.navigateToPage(
+      context, 
+      page, 
+      dokterData: _currentDokterData
+    );
+  }
+
+  Future<void> _handleLogout() async {
+    final confirm = await Sidebar.NavigationHelper.showLogoutConfirmation(context);
+    if (confirm) {
+      await Sidebar.NavigationHelper.logout(context);
+    }
+  }
+
+  // ===== DATA INITIALIZATION =====
+  void _initializeData() {
+    if (_currentDokterData != null) {
+      // Set basic fields
+      _namaController.text = _currentDokterData!['nama_dokter']?.toString() ?? '';
+      _noHpController.text = _currentDokterData!['no_hp']?.toString() ?? '';
+      _pengalamanController.text = _currentDokterData!['pengalaman']?.toString() ?? '';
+      _deskripsiController.text = _currentDokterData!['deskripsi_dokter']?.toString() ?? '';
+      
+      // Set image URL
+      if (_currentDokterData!['foto_dokter'] != null) {
+        _currentImageUrl = 'http://10.19.0.247:8000/storage/${_currentDokterData!['foto_dokter']}';
+      }
+      
+      // Set spesialisasi
+      if (_currentDokterData!['jenis_spesialis_id'] != null) {
+        _selectedSpesialisasiId = int.tryParse(_currentDokterData!['jenis_spesialis_id'].toString());
+      } else if (_currentDokterData!['jenis_spesialis'] != null && _currentDokterData!['jenis_spesialis'] is Map) {
+        _selectedSpesialisasiId = int.tryParse(_currentDokterData!['jenis_spesialis']['id'].toString());
+      }
+
+      // Process poli relationships - support many-to-many
+      _selectedPoliIds = [];
+      
+      // Check Laravel relationship data
+      var poliRelationData = _currentDokterData!['poli'] ?? _currentDokterData!['polis'];
+      
+      if (poliRelationData != null && poliRelationData is List && poliRelationData.isNotEmpty) {
+        for (final poliItem in poliRelationData) {
+          if (poliItem is Map) {
+            // Direct poli object
+            if (poliItem['id'] != null) {
+              final poliId = int.tryParse(poliItem['id'].toString());
+              if (poliId != null && !_selectedPoliIds.contains(poliId)) {
+                _selectedPoliIds.add(poliId);
+              }
+            }
+            // Pivot data
+            else if (poliItem['pivot'] != null && poliItem['pivot']['poli_id'] != null) {
+              final poliId = int.tryParse(poliItem['pivot']['poli_id'].toString());
+              if (poliId != null && !_selectedPoliIds.contains(poliId)) {
+                _selectedPoliIds.add(poliId);
+              }
+            }
+            // Pivot table structure
+            else if (poliItem['poli_id'] != null) {
+              final poliId = int.tryParse(poliItem['poli_id'].toString());
+              if (poliId != null && !_selectedPoliIds.contains(poliId)) {
+                _selectedPoliIds.add(poliId);
+              }
+            }
+          }
+        }
+      }
+      
+      // Check custom backend fields
+      if (_selectedPoliIds.isEmpty) {
+        final customPoliFields = ['all_poli', 'poli_list', 'dokter_poli'];
+        
+        for (final fieldName in customPoliFields) {
+          final customData = _currentDokterData![fieldName];
+          if (customData != null && customData is List && customData.isNotEmpty) {
+            for (final item in customData) {
+              if (item is Map && item['id'] != null) {
+                final poliId = int.tryParse(item['id'].toString());
+                if (poliId != null && !_selectedPoliIds.contains(poliId)) {
+                  _selectedPoliIds.add(poliId);
+                }
+              }
+            }
+            break;
+          }
+        }
+      }
+      
+      // Legacy single poli_id fallback
+      if (_selectedPoliIds.isEmpty && _currentDokterData!['poli_id'] != null) {
+        final poliId = int.tryParse(_currentDokterData!['poli_id'].toString());
+        if (poliId != null) {
+          _selectedPoliIds.add(poliId);
+        }
+      }
+      
+      // Remove duplicates
+      _selectedPoliIds = _selectedPoliIds.toSet().toList();
+    }
+  }
+
+  // ===== API METHODS =====
+  Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
   }
 
-  Future<void> _loadSpesialisList() async {
+  Future<void> _loadSpesialisasi() async {
     try {
-      final token = await getToken();
-      
+      final token = await _getToken();
+      if (token == null) return;
+
       final response = await http.get(
-        Uri.parse('http://192.168.1.6:8000/api/getDataSpesialisasiDokter'),
+        Uri.parse('http://10.19.0.247:8000/api/getDataSpesialisasiDokter'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        List<dynamic> spesialisasiData = [];
+        
+        if (data is Map) {
+          if (data['success'] == true && data['data'] is List) {
+            spesialisasiData = data['data'];
+          } else if (data['data'] is List) {
+            spesialisasiData = data['data'];
+          } else if (data['spesialisasi'] is List) {
+            spesialisasiData = data['spesialisasi'];
+          }
+        } else if (data is List) {
+          spesialisasiData = data;
+        }
+
+        if (spesialisasiData.isNotEmpty) {
+          setState(() {
+            _spesialisasiList = List<Map<String, dynamic>>.from(spesialisasiData);
+          });
+        }
+      }
+    } catch (e) {
+      // Handle error silently
+    }
+  }
+
+  Future<void> _loadPoli() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('http://10.19.0.247:8000/api/getDataPoli'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        List<dynamic> poliData = [];
+        
+        if (data is Map) {
+          if (data['success'] == true && data['data'] is List) {
+            poliData = data['data'];
+          } else if (data['data'] is List) {
+            poliData = data['data'];
+          } else if (data.containsKey('poli') && data['poli'] is List) {
+            poliData = data['poli'];
+          }
+        } else if (data is List) {
+          poliData = data;
+        }
+
+        setState(() {
+          _poliList = List<Map<String, dynamic>>.from(poliData);
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _poliList = [];
+      });
+    }
+  }
+
+  Future<void> _updateProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        _showErrorSnackBar('Token tidak ditemukan. Silakan login ulang.');
+        return;
+      }
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://10.19.0.247:8000/api/dokter/update-profile'),
+      );
+
+      request.headers.addAll({
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      });
+
+      // Add form fields
+      request.fields['nama_dokter'] = _namaController.text.trim();
+      request.fields['no_hp'] = _noHpController.text.trim();
+      request.fields['pengalaman'] = _pengalamanController.text.trim();
+      request.fields['deskripsi_dokter'] = _deskripsiController.text.trim();
+      
+      if (_selectedSpesialisasiId != null) {
+        request.fields['jenis_spesialis_id'] = _selectedSpesialisasiId.toString();
+      }
+
+      // Send poli data for many-to-many relationship
+      if (_selectedPoliIds.isNotEmpty) {
+        request.fields['poli_ids'] = jsonEncode(_selectedPoliIds);
+        request.fields['poli_ids_csv'] = _selectedPoliIds.join(',');
+        
+        // Send as individual array items for form data compatibility
+        for (int i = 0; i < _selectedPoliIds.length; i++) {
+          request.fields['poli_ids[$i]'] = _selectedPoliIds[i].toString();
+        }
+      } else {
+        request.fields['poli_ids'] = jsonEncode([]);
+      }
+
+      // Add image if selected
+      if (_selectedImage != null) {
+        request.files.add(await http.MultipartFile.fromPath(
+          'foto_dokter',
+          _selectedImage!.path,
+        ));
+      }
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+      final data = json.decode(responseBody);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        await _refreshDokterData();
+        _showSuccessSnackBar('Profil berhasil diperbarui');
+        Navigator.pop(context, _currentDokterData);
+      } else {
+        final errorMessage = data['message'] ?? 
+                           data['error'] ?? 
+                           data['errors']?.toString() ??
+                           'Gagal memperbarui profil';
+        _showErrorSnackBar(errorMessage);
+      }
+    } catch (e) {
+      _showErrorSnackBar('Terjadi kesalahan: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _refreshDokterData() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('http://10.19.0.247:8000/api/dokter/get-data-dokter?include_poli=true'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -131,293 +356,57 @@ class _EditProfileDokterState extends State<EditProfileDokter>
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        if (data['success'] == true) {
+        if (data['success'] == true && 
+            data['Data Dokter'] is List && 
+            data['Data Dokter'].isNotEmpty) {
+          
           setState(() {
-            spesialisList = data['data'] ?? [];
+            _currentDokterData = data['Data Dokter'].first;
           });
-        } else {
-          await _loadSpesialisListAlternative();
-        }
-      } else {
-        await _loadSpesialisListAlternative();
-      }
-    } catch (e) {
-      await _loadSpesialisListAlternative();
-    }
-  }
-
-  Future<void> _loadSpesialisListAlternative() async {
-    try {
-      final response = await http.get(
-        Uri.parse('http://192.168.1.6:8000/api/getDataSpesialisasiDokter'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          setState(() {
-            spesialisList = data['data'] ?? [];
-          });
+          
+          _initializeData();
         }
       }
     } catch (e) {
-      setState(() {
-        spesialisList = [
-          {'id': 1, 'nama_spesialis': 'Umum'},
-          {'id': 2, 'nama_spesialis': 'Jantung'},
-          {'id': 3, 'nama_spesialis': 'Mata'},
-          {'id': 4, 'nama_spesialis': 'Kulit'},
-          {'id': 5, 'nama_spesialis': 'THT'},
-          {'id': 6, 'nama_spesialis': 'Anak'},
-        ];
-      });
+      // Handle error silently
     }
   }
 
   Future<void> _pickImage() async {
-    HapticFeedback.lightImpact();
-    
     try {
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        builder: (context) => _buildImagePickerModal(),
-      );
-    } catch (e) {
-      _showErrorSnackBar('Error memilih gambar: $e');
-    }
-  }
-
-  Widget _buildImagePickerModal() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-
-    return Container(
-      margin: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              margin: EdgeInsets.only(top: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Text(
-                    'Pilih Foto Profile',
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 16 : 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildImageSourceOption(
-                        icon: Icons.camera_alt_rounded,
-                        label: 'Kamera',
-                        onTap: () => _selectImageSource(ImageSource.camera),
-                        color: Colors.teal,
-                        isSmallScreen: isSmallScreen,
-                      ),
-                      _buildImageSourceOption(
-                        icon: Icons.photo_library_rounded,
-                        label: 'Galeri',
-                        onTap: () => _selectImageSource(ImageSource.gallery),
-                        color: Colors.blue,
-                        isSmallScreen: isSmallScreen,
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 20),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(
-                      'Batal',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: isSmallScreen ? 14 : 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildImageSourceOption({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required Color color,
-    required bool isSmallScreen,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              size: isSmallScreen ? 32 : 40,
-              color: color,
-            ),
-            SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: isSmallScreen ? 12 : 14,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _selectImageSource(ImageSource source) async {
-    Navigator.pop(context);
-    
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: source,
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
         maxWidth: 1024,
         maxHeight: 1024,
-        imageQuality: 85,
+        imageQuality: 80,
       );
-      
+
       if (image != null) {
-        setState(() {
-          _imageFile = File(image.path);
-        });
-        _showSuccessSnackBar('Foto berhasil dipilih');
-      }
-    } catch (e) {
-      _showErrorSnackBar('Error memilih gambar: $e');
-    }
-  }
-
-  Future<void> _updateProfile() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    HapticFeedback.mediumImpact();
-    _scaleAnimationController.forward().then((_) {
-      _scaleAnimationController.reverse();
-    });
-
-    setState(() {
-      isLoading = true;
-    });
-
-    try {
-      final token = await getToken();
-      
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('http://192.168.1.6:8000/api/dokter/update-profile'),
-      );
-
-      request.headers.addAll({
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      });
-      
-      if (_namaController.text.isNotEmpty) {
-        request.fields['nama_dokter'] = _namaController.text.trim();
-      }
-      if (_deskripsiController.text.isNotEmpty) {
-        request.fields['deskripsi_dokter'] = _deskripsiController.text.trim();
-      }
-      if (_pengalamanController.text.isNotEmpty) {
-        request.fields['pengalaman'] = _pengalamanController.text.trim();
-      }
-      if (_noHpController.text.isNotEmpty) {
-        request.fields['no_hp'] = _noHpController.text.trim();
-      }
-      if (selectedSpesialisId != null) {
-        request.fields['jenis_spesialis_id'] = selectedSpesialisId.toString();
-      }
-
-      if (_imageFile != null) {
-        request.files.add(await http.MultipartFile.fromPath(
-          'foto_dokter',
-          _imageFile!.path,
-        ));
-      }
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        _showSuccessSnackBar(data['message'] ?? 'Profile berhasil diupdate');
-        Navigator.pop(context, true);
-      } else {
-        String errorMessage = 'Gagal update profile';
-        if (data['errors'] != null) {
-          Map<String, dynamic> errors = data['errors'];
-          errorMessage = errors.values.first[0] ?? errorMessage;
-        } else if (data['message'] != null) {
-          errorMessage = data['message'];
-        }
+        final file = File(image.path);
+        final fileSize = await file.length();
         
-        _showErrorSnackBar(errorMessage);
+        if (fileSize > 5 * 1024 * 1024) {
+          _showErrorSnackBar('Ukuran foto maksimal 5MB');
+          return;
+        }
+
+        setState(() {
+          _selectedImage = file;
+        });
       }
     } catch (e) {
-      _showErrorSnackBar('Error: $e');
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
+      _showErrorSnackBar('Gagal memilih gambar: $e');
     }
   }
 
+  // ===== UI HELPER METHODS =====
   void _showSuccessSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.green.shade600,
+        content: Text(message),
+        backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: EdgeInsets.all(16),
       ),
     );
   }
@@ -425,526 +414,818 @@ class _EditProfileDokterState extends State<EditProfileDokter>
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.red.shade600,
+        content: Text(message),
+        backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-    
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-    final isTablet = screenWidth >= 768;
+    final isDesktop = screenWidth >= 1024;
+    final isTablet = screenWidth >= 768 && screenWidth < 1024;
+    final isMobile = screenWidth < 768;
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: _buildAppBar(isSmallScreen),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          physics: BouncingScrollPhysics(),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
-          child: Center(
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: isTablet ? 600 : double.infinity,
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildProfilePhotoSection(isSmallScreen),
-                    SizedBox(height: isSmallScreen ? 20 : 24),
-                    _buildFormSection(isSmallScreen),
-                    SizedBox(height: isSmallScreen ? 24 : 32),
-                    _buildSaveButton(isSmallScreen),
-                    SizedBox(height: 20),
-                  ],
+      body: Row(
+        children: [
+          // Shared Sidebar
+          if (isDesktop || isTablet) 
+            Sidebar.SharedSidebar(
+              currentPage: Sidebar.SidebarPage.profilDokter,
+              dokterData: _currentDokterData,
+              isCollapsed: _isSidebarCollapsed,
+              onToggleCollapse: () {
+                setState(() {
+                  _isSidebarCollapsed = !_isSidebarCollapsed;
+                });
+              },
+              onNavigate: _handleSidebarNavigation,
+              onLogout: _handleLogout,
+            ),
+
+          // Main Content Area
+          Expanded(
+            child: Column(
+              children: [
+                // Shared Top Header Bar
+                Sidebar.SharedTopHeader(
+                  currentPage: Sidebar.SidebarPage.profilDokter,
+                  dokterData: _currentDokterData,
+                  isMobile: isMobile,
                 ),
-              ),
+
+                // Main Content
+                Expanded(child: _buildMainContent(isMobile)),
+              ],
             ),
           ),
-        ),
+        ],
       ),
+      // Shared Mobile Drawer
+      drawer: isMobile ? Sidebar.SharedMobileDrawer(
+        currentPage: Sidebar.SidebarPage.profilDokter,
+        dokterData: _currentDokterData,
+        onNavigate: _handleSidebarNavigation,
+        onLogout: _handleLogout,
+      ) : null,
     );
   }
 
-  PreferredSizeWidget _buildAppBar(bool isSmallScreen) {
-    return AppBar(
-      title: Text(
-        'Edit Profile Dokter',
-        style: TextStyle(
-          fontSize: isSmallScreen ? 18 : 20,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      backgroundColor: Colors.teal.shade600,
-      foregroundColor: Colors.white,
-      elevation: 0,
-      systemOverlayStyle: SystemUiOverlayStyle.light,
-      flexibleSpace: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.teal.shade600, Colors.teal.shade500],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _buildMainContent(bool isMobile) {
+    return Container(
+      color: const Color(0xFFF8FAFC),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Profile Header Card
+              _buildProfileHeaderCard(isMobile),
+              const SizedBox(height: 24),
 
-  Widget _buildProfilePhotoSection(bool isSmallScreen) {
-    double avatarRadius = isSmallScreen ? 60 : 70;
-    
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Container(
-        padding: EdgeInsets.all(isSmallScreen ? 24 : 32),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.teal.shade50,
-              Colors.white,
+              // Form Fields
+              _buildFormFields(isMobile),
+              const SizedBox(height: 32),
+
+              // Action Buttons
+              _buildActionButtons(isMobile),
             ],
           ),
         ),
-        child: Column(
-          children: [
-            Hero(
-              tag: 'profile_photo',
-              child: Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.teal.withOpacity(0.3),
-                          spreadRadius: 4,
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: CircleAvatar(
-                      radius: avatarRadius,
-                      backgroundColor: Colors.grey.shade200,
-                      backgroundImage: _imageFile != null
-                          ? FileImage(_imageFile!)
-                          : (widget.dokterData['foto_dokter'] != null
-                              ? NetworkImage(
-                                  'http://192.168.1.6:8000/storage/${widget.dokterData['foto_dokter']}',
-                                )
-                              : null),
-                      child: (_imageFile == null && widget.dokterData['foto_dokter'] == null)
-                          ? Icon(
-                              Icons.person_rounded,
-                              size: avatarRadius * 0.7,
-                              color: Colors.grey.shade400,
-                            )
-                          : null,
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(25),
-                        onTap: _pickImage,
-                        child: Container(
-                          padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
-                          decoration: BoxDecoration(
-                            color: Colors.teal.shade600,
-                            borderRadius: BorderRadius.circular(25),
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.teal.withOpacity(0.4),
-                                spreadRadius: 2,
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.camera_alt_rounded,
-                            color: Colors.white,
-                            size: isSmallScreen ? 18 : 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: isSmallScreen ? 16 : 20),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.teal.shade100,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    color: Colors.teal.shade700,
-                    size: isSmallScreen ? 16 : 18,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Ketuk untuk mengubah foto',
-                    style: TextStyle(
-                      color: Colors.teal.shade700,
-                      fontSize: isSmallScreen ? 12 : 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
 
-  Widget _buildFormSection(bool isSmallScreen) {
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(
+  Widget _buildProfileHeaderCard(bool isMobile) {
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 20 : 28),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0891B2), Color(0xFF06B6D4)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0891B2).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: EdgeInsets.all(isSmallScreen ? 20 : 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.shade100,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.edit_rounded,
-                    color: Colors.teal.shade700,
-                    size: isSmallScreen ? 20 : 24,
+      child: Row(
+        children: [
+          // Profile Image
+          Stack(
+            children: [
+              Container(
+                width: isMobile ? 80 : 100,
+                height: isMobile ? 80 : 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  color: Colors.white.withOpacity(0.2),
+                ),
+                child: ClipOval(
+                  child: _selectedImage != null
+                      ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                      : _currentImageUrl != null
+                          ? Image.network(
+                              _currentImageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  _buildDefaultAvatar(isMobile),
+                            )
+                          : _buildDefaultAvatar(isMobile),
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: InkWell(
+                  onTap: _pickImage,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: FaIcon( // ✅ Changed to FaIcon
+                      FontAwesomeIcons.camera,
+                      color: const Color(0xFF0891B2),
+                      size: isMobile ? 16 : 18,
+                    ),
                   ),
                 ),
-                SizedBox(width: 12),
+              ),
+            ],
+          ),
+          SizedBox(width: isMobile ? 16 : 20),
+
+          // Profile Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  'Informasi Dokter',
+                  'Edit Profil Dokter',
                   style: TextStyle(
-                    fontSize: isSmallScreen ? 18 : 20,
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: isMobile ? 14 : 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Dr. ${_namaController.text.isNotEmpty ? _namaController.text : "Dokter"}',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isMobile ? 20 : 24,
                     fontWeight: FontWeight.bold,
-                    color: Colors.teal.shade700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FaIcon( // ✅ Changed to FaIcon
+                        FontAwesomeIcons.pen,
+                        color: Colors.white,
+                        size: isMobile ? 14 : 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Editing',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isMobile ? 12 : 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            SizedBox(height: isSmallScreen ? 20 : 24),
-            _buildFormFields(isSmallScreen),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildFormFields(bool isSmallScreen) {
+  Widget _buildDefaultAvatar(bool isMobile) {
+    return Container(
+      color: Colors.grey.shade200,
+      child: FaIcon( // ✅ Changed to FaIcon
+        FontAwesomeIcons.userDoctor,
+        color: Colors.grey.shade400,
+        size: isMobile ? 40 : 50,
+      ),
+    );
+  }
+
+  Widget _buildFormFields(bool isMobile) {
     return Column(
       children: [
-        _buildTextField(
-          controller: _namaController,
-          label: 'Nama Dokter',
-          icon: Icons.person_outline_rounded,
-          focusNode: _focusNodes[0],
-          nextFocusNode: _focusNodes[1],
-          isSmallScreen: isSmallScreen,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Nama dokter tidak boleh kosong';
-            }
-            return null;
-          },
+        // Informasi Dokter Section
+        _buildSectionCard(
+          'Informasi Dokter',
+          FontAwesomeIcons.userDoctor, // ✅ Changed to FontAwesome
+          const Color(0xFF0891B2),
+          [
+            _buildTextFormField(
+              controller: _namaController,
+              label: 'Nama Dokter',
+              hint: 'Masukkan nama lengkap',
+              icon: FontAwesomeIcons.userDoctor, // ✅ Changed to FontAwesome
+              validator: (value) =>
+                  value?.trim().isEmpty ?? true ? 'Nama tidak boleh kosong' : null,
+              isMobile: isMobile,
+            ),
+            const SizedBox(height: 16),
+            _buildDropdownField(
+              label: 'Spesialisasi',
+              hint: 'Pilih spesialisasi',
+              icon: FontAwesomeIcons.stethoscope, // ✅ Changed to FontAwesome
+              value: _selectedSpesialisasiId,
+              items: _spesialisasiList,
+              displayField: 'nama_spesialis',
+              onChanged: (value) => setState(() => _selectedSpesialisasiId = value),
+              isMobile: isMobile,
+            ),
+            const SizedBox(height: 16),
+            _buildMultiSelectPoliField(
+              label: 'Poli',
+              hint: 'Pilih poli yang ditangani',
+              icon: FontAwesomeIcons.houseMedical, // ✅ Changed to FontAwesome
+              selectedPoliIds: _selectedPoliIds,
+              poliList: _poliList,
+              onSelectionChanged: (selectedIds) {
+                setState(() {
+                  _selectedPoliIds = selectedIds;
+                });
+              },
+              isMobile: isMobile,
+            ),
+            const SizedBox(height: 16),
+            _buildTextFormField(
+              controller: _noHpController,
+              label: 'Nomor HP',
+              hint: 'Masukkan nomor HP aktif',
+              icon: FontAwesomeIcons.phone, // ✅ Changed to FontAwesome
+              keyboardType: TextInputType.phone,
+              validator: (value) =>
+                  value?.trim().isEmpty ?? true ? 'Nomor HP tidak boleh kosong' : null,
+              isMobile: isMobile,
+            ),
+          ],
+          isMobile,
         ),
-        SizedBox(height: isSmallScreen ? 16 : 20),
-        
-        _buildDropdownField(isSmallScreen),
-        SizedBox(height: isSmallScreen ? 16 : 20),
-        
-        _buildTextField(
-          controller: _noHpController,
-          label: 'No. HP',
-          icon: Icons.phone_outlined,
-          keyboardType: TextInputType.phone,
-          focusNode: _focusNodes[2],
-          nextFocusNode: _focusNodes[3],
-          isSmallScreen: isSmallScreen,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'No HP tidak boleh kosong';
-            }
-            if (value.length < 10) {
-              return 'No HP minimal 10 digit';
-            }
-            return null;
-          },
+        const SizedBox(height: 20),
+
+        // Pengalaman Section
+        _buildSectionCard(
+          'Pengalaman',
+          FontAwesomeIcons.briefcase, // ✅ Changed to FontAwesome
+          const Color(0xFF059669),
+          [
+            _buildTextFormField(
+              controller: _pengalamanController,
+              label: 'Pengalaman Kerja',
+              hint: 'Masukkan pengalaman kerja',
+              icon: FontAwesomeIcons.clockRotateLeft, // ✅ Changed to FontAwesome
+              maxLines: 3,
+              isMobile: isMobile,
+            ),
+          ],
+          isMobile,
         ),
-        SizedBox(height: isSmallScreen ? 16 : 20),
-        
-        _buildTextField(
-          controller: _pengalamanController,
-          label: 'Pengalaman',
-          icon: Icons.work_outline_rounded,
-          focusNode: _focusNodes[3],
-          nextFocusNode: _focusNodes[4],
-          isSmallScreen: isSmallScreen,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Pengalaman tidak boleh kosong';
-            }
-            return null;
-          },
-        ),
-        SizedBox(height: isSmallScreen ? 16 : 20),
-        
-        _buildTextField(
-          controller: _deskripsiController,
-          label: 'Deskripsi',
-          icon: Icons.description_outlined,
-          maxLines: isSmallScreen ? 4 : 5,
-          focusNode: _focusNodes[4],
-          isSmallScreen: isSmallScreen,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Deskripsi tidak boleh kosong';
-            }
-            return null;
-          },
+        const SizedBox(height: 20),
+
+        // Deskripsi Section
+        _buildSectionCard(
+          'Deskripsi',
+          FontAwesomeIcons.fileLines, // ✅ Changed to FontAwesome
+          const Color(0xFF7C3AED),
+          [
+            _buildTextFormField(
+              controller: _deskripsiController,
+              label: 'Deskripsi Dokter',
+              hint: 'Tulis deskripsi atau bio singkat',
+              icon: FontAwesomeIcons.fileLines, // ✅ Changed to FontAwesome
+              maxLines: 4,
+              isMobile: isMobile,
+            ),
+          ],
+          isMobile,
         ),
       ],
     );
   }
 
-  Widget _buildTextField({
+  Widget _buildSectionCard(
+    String title,
+    IconData icon,
+    Color color,
+    List<Widget> children,
+    bool isMobile,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section Header
+          Container(
+            padding: EdgeInsets.all(isMobile ? 16 : 20),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.05),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: FaIcon(icon, color: color, size: 20), // ✅ Changed to FaIcon
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: isMobile ? 16 : 18,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Section Content
+          Padding(
+            padding: EdgeInsets.all(isMobile ? 16 : 20),
+            child: Column(children: children),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextFormField({
     required TextEditingController controller,
     required String label,
+    required String hint,
     required IconData icon,
-    TextInputType? keyboardType,
-    int? maxLines,
-    FocusNode? focusNode,
-    FocusNode? nextFocusNode,
-    required bool isSmallScreen,
-    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    required bool isMobile,
   }) {
-    return TextFormField(
-      controller: controller,
-      focusNode: focusNode,
-      keyboardType: keyboardType,
-      maxLines: maxLines ?? 1,
-      inputFormatters: inputFormatters,
-      style: TextStyle(fontSize: isSmallScreen ? 14 : 16),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          fontSize: isSmallScreen ? 14 : 16,
-          color: Colors.grey.shade600,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            FaIcon(icon, size: 16, color: Colors.grey.shade600), // ✅ Changed to FaIcon
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E293B),
+              ),
+            ),
+          ],
         ),
-        prefixIcon: Padding(
-          padding: EdgeInsets.only(
-            bottom: maxLines != null && maxLines > 1 ? 60 : 0,
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          validator: validator,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          style: TextStyle(fontSize: isMobile ? 14 : 16),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.grey.shade500),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0891B2), width: 2),
+            ),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: maxLines > 1 ? 16 : 12,
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
           ),
-          child: Icon(
-            icon,
-            size: isSmallScreen ? 20 : 24,
-            color: Colors.teal.shade600,
-          ),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.teal.shade600, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.grey.shade50,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: isSmallScreen ? 14 : 16,
-          vertical: isSmallScreen ? 14 : 16,
-        ),
-      ),
-      textInputAction: nextFocusNode != null ? TextInputAction.next : TextInputAction.done,
-      onFieldSubmitted: (_) {
-        if (nextFocusNode != null) {
-          FocusScope.of(context).requestFocus(nextFocusNode);
-        }
-      },
-      validator: validator,
+      ],
     );
   }
 
-  Widget _buildDropdownField(bool isSmallScreen) {
-    return DropdownButtonFormField<int>(
-      value: selectedSpesialisId,
-      style: TextStyle(
-        fontSize: isSmallScreen ? 14 : 16,
-        color: Colors.black,
-      ),
-      decoration: InputDecoration(
-        labelText: 'Spesialisasi',
-        labelStyle: TextStyle(
-          fontSize: isSmallScreen ? 14 : 16,
-          color: Colors.grey.shade600,
+  Widget _buildDropdownField({
+    required String label,
+    required String hint,
+    required IconData icon,
+    required int? value,
+    required List<Map<String, dynamic>> items,
+    required String displayField,
+    required void Function(int?) onChanged,
+    required bool isMobile,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            FaIcon(icon, size: 16, color: Colors.grey.shade600), // ✅ Changed to FaIcon
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E293B),
+              ),
+            ),
+          ],
         ),
-        prefixIcon: Icon(
-          Icons.medical_services_outlined,
-          size: isSmallScreen ? 20 : 24,
-          color: Colors.teal.shade600,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.teal.shade600, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.grey.shade50,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: isSmallScreen ? 14 : 16,
-          vertical: isSmallScreen ? 14 : 16,
-        ),
-      ),
-      items: spesialisList.map<DropdownMenuItem<int>>((spesialis) {
-        return DropdownMenuItem<int>(
-          value: spesialis['id'],
-          child: Text(
-            spesialis['nama_spesialis'] ?? '',
-            style: TextStyle(fontSize: isSmallScreen ? 14 : 16),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          value: value,
+          hint: Text(
+            hint,
+            style: TextStyle(color: Colors.grey.shade500),
           ),
-        );
-      }).toList(),
-      onChanged: (value) {
-        setState(() {
-          selectedSpesialisId = value;
-        });
-      },
-      validator: (value) {
-        if (value == null) {
-          return 'Pilih spesialisasi';
-        }
-        return null;
-      },
-      dropdownColor: Colors.white,
-      icon: Icon(
-        Icons.arrow_drop_down_rounded,
-        color: Colors.teal.shade600,
-      ),
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0891B2), width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+          ),
+          items: items.map((item) {
+            return DropdownMenuItem<int>(
+              value: item['id'],
+              child: Text(
+                item[displayField]?.toString() ?? '',
+                style: TextStyle(fontSize: isMobile ? 14 : 16),
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 
-  Widget _buildSaveButton(bool isSmallScreen) {
-    return AnimatedBuilder(
-      animation: _scaleAnimation,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: _scaleAnimation.value,
+  Widget _buildMultiSelectPoliField({
+    required String label,
+    required String hint,
+    required IconData icon,
+    required List<int> selectedPoliIds,
+    required List<Map<String, dynamic>> poliList,
+    required Function(List<int>) onSelectionChanged,
+    required bool isMobile,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            FaIcon(icon, size: 16, color: Colors.grey.shade600), // ✅ Changed to FaIcon
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E293B),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        
+        InkWell(
+          onTap: () => _showPoliSelectionDialog(selectedPoliIds, poliList, onSelectionChanged),
           child: Container(
             width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: isLoading ? null : _updateProfile,
-              icon: isLoading
-                  ? SizedBox(
-                      width: isSmallScreen ? 18 : 20,
-                      height: isSmallScreen ? 18 : 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : Icon(
-                      Icons.save_rounded,
-                      size: isSmallScreen ? 20 : 22,
-                    ),
-              label: Text(
-                isLoading ? 'Menyimpan...' : 'Simpan Perubahan',
-                style: TextStyle(
-                  fontSize: isSmallScreen ? 16 : 18,
-                  fontWeight: FontWeight.w600,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+              color: const Color(0xFFF8FAFC),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: selectedPoliIds.isEmpty
+                      ? Text(
+                          hint,
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: isMobile ? 14 : 16,
+                          ),
+                        )
+                      : Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: selectedPoliIds.map((poliId) {
+                            final poli = poliList.firstWhere(
+                              (p) => int.tryParse(p['id'].toString()) == poliId,
+                              orElse: () => {'nama_poli': 'Unknown'},
+                            );
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0891B2).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFF0891B2).withOpacity(0.3),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    poli['nama_poli']?.toString() ?? 'Unknown',
+                                    style: TextStyle(
+                                      color: const Color(0xFF0891B2),
+                                      fontSize: isMobile ? 12 : 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    onTap: () {
+                                      final newSelection = List<int>.from(selectedPoliIds);
+                                      newSelection.remove(poliId);
+                                      onSelectionChanged(newSelection);
+                                    },
+                                    child: FaIcon( // ✅ Changed to FaIcon
+                                      FontAwesomeIcons.xmark,
+                                      size: isMobile ? 14 : 16,
+                                      color: const Color(0xFF0891B2),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
                 ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal.shade600,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(
-                  vertical: isSmallScreen ? 16 : 18,
-                  horizontal: 24,
+                FaIcon( // ✅ Changed to FaIcon
+                  FontAwesomeIcons.chevronDown,
+                  color: Colors.grey.shade600,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 4,
-                shadowColor: Colors.teal.withOpacity(0.3),
+              ],
+            ),
+          ),
+        ),
+        
+        if (selectedPoliIds.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${selectedPoliIds.length} poli dipilih',
+              style: TextStyle(
+                fontSize: isMobile ? 12 : 13,
+                color: const Color(0xFF0891B2),
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
+      ],
+    );
+  }
+
+  void _showPoliSelectionDialog(
+    List<int> currentSelection,
+    List<Map<String, dynamic>> poliList,
+    Function(List<int>) onSelectionChanged,
+  ) {
+    List<int> tempSelection = List.from(currentSelection);
+    String searchQuery = '';
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredPoli = poliList.where((poli) {
+              final namaPoliLower = poli['nama_poli']?.toString().toLowerCase() ?? '';
+              return namaPoliLower.contains(searchQuery.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
+              title: Column(
+                children: [
+                  Text('Pilih Poli (${poliList.length} tersedia)'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Cari poli...',
+                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass), // ✅ Changed to FaIcon
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, 
+                        vertical: 8,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setDialogState(() {
+                        searchQuery = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              content: Container(
+                width: double.maxFinite,
+                constraints: const BoxConstraints(maxHeight: 400),
+                child: filteredPoli.isEmpty
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FaIcon( // ✅ Changed to FaIcon
+                            searchQuery.isEmpty ? FontAwesomeIcons.circleInfo : FontAwesomeIcons.magnifyingGlass, 
+                            size: 48, 
+                            color: Colors.grey
+                          ),
+                          const SizedBox(height: 16),
+                          Text(searchQuery.isEmpty 
+                            ? 'Tidak ada data poli tersedia'
+                            : 'Tidak ditemukan poli yang sesuai'
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: filteredPoli.length,
+                        itemBuilder: (context, index) {
+                          final poli = filteredPoli[index];
+                          final poliId = int.tryParse(poli['id'].toString());
+                          final poliNama = poli['nama_poli']?.toString() ?? 'Nama tidak tersedia';
+                          
+                          if (poliId == null) {
+                            return const SizedBox.shrink();
+                          }
+                          
+                          final isSelected = tempSelection.contains(poliId);
+                          
+                          return CheckboxListTile(
+                            title: Text(poliNama),
+                            subtitle: Text('ID: $poliId'),
+                            value: isSelected,
+                            activeColor: const Color(0xFF0891B2),
+                            onChanged: (bool? selected) {
+                              setDialogState(() {
+                                if (selected == true) {
+                                  if (!tempSelection.contains(poliId)) {
+                                    tempSelection.add(poliId);
+                                  }
+                                } else {
+                                  tempSelection.remove(poliId);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    onSelectionChanged(tempSelection);
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0891B2),
+                  ),
+                  child: Text(
+                    'Simpan (${tempSelection.length})',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _buildActionButtons(bool isMobile) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: _isLoading ? null : () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.symmetric(vertical: isMobile ? 12 : 16),
+              side: const BorderSide(color: Color(0xFF64748B)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text(
+              'Batal',
+              style: TextStyle(
+                fontSize: isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 2,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _updateProfile,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0891B2),
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: isMobile ? 12 : 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              elevation: 0,
+            ),
+            child: _isLoading
+                ? SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Text(
+                    'Simpan Perubahan',
+                    style: TextStyle(
+                      fontSize: isMobile ? 14 : 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -34,7 +34,7 @@ class _TestimoniPageState extends State<TestimoniPage> {
       }
 
       final response = await http.get(
-        Uri.parse('http://192.168.1.6:8000/api/getDataTestimoni'),
+        Uri.parse('http://10.19.0.247:8000/api/getDataTestimoni'),
       );
 
       print('📥 Status Code: ${response.statusCode}');
@@ -113,7 +113,7 @@ class _TestimoniPageState extends State<TestimoniPage> {
       
       try {
         final profileResponse = await http.get(
-          Uri.parse('http://192.168.1.6:8000/api/pasien/profile'),
+          Uri.parse('http://10.19.0.247:8000/api/pasien/profile'),
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
@@ -552,7 +552,7 @@ class _AddTestimoniDialogState extends State<AddTestimoniDialog> {
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.6:8000/api/create-data-testimoni'),
+        Uri.parse('http://10.19.0.247:8000/api/create-data-testimoni'),
       );
 
       request.headers['Authorization'] = 'Bearer ${widget.token}';
@@ -1146,7 +1146,7 @@ class TestimoniCard extends StatelessWidget {
 
   String getVideoUrl(String? linkVideo) {
     if (linkVideo == null || linkVideo.isEmpty) return '';
-    return 'http://192.168.1.6:8000/storage/assets/$linkVideo';
+    return 'http://10.19.0.247:8000/storage/assets/$linkVideo';
   }
 
   void _showVideoDialog(BuildContext context, String videoUrl) {

@@ -205,7 +205,7 @@ class _PesanJadwalState extends State<PesanJadwal>
 
     try {
       final response = await http.get(
-        Uri.parse('http://192.168.1.6:8000/api/getDataPoli'),
+        Uri.parse('http://10.19.0.247:8000/api/getDataPoli'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -237,7 +237,7 @@ class _PesanJadwalState extends State<PesanJadwal>
 
     try {
       final response = await http.get(
-        Uri.parse('http://192.168.1.6:8000/api/getAllDokter'),
+        Uri.parse('http://10.19.0.247:8000/api/getAllDokter'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -527,7 +527,7 @@ class _PesanJadwalState extends State<PesanJadwal>
 
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.1.6:8000/api/kunjungan/create'),
+        Uri.parse('http://10.19.0.247:8000/api/kunjungan/create'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -1368,7 +1368,7 @@ class _PesanJadwalState extends State<PesanJadwal>
                                         borderRadius: BorderRadius.circular(12),
                                         child: dokter['foto_dokter'] != null
                                             ? Image.network(
-                                                'http://192.168.1.6:8000/storage/${dokter['foto_dokter']}',
+                                                'http://10.19.0.247:8000/storage/${dokter['foto_dokter']}',
                                                 fit: BoxFit.cover,
                                                 errorBuilder:
                                                     (

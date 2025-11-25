@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:RoyalClinic/screen/register.dart';
@@ -7,6 +8,8 @@ import 'package:RoyalClinic/dokter/dashboard.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:RoyalClinic/screen/forgetpass.dart';
 import 'package:RoyalClinic/screen/forgetuser.dart';
+import 'package:RoyalClinic/services/auth_service.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -22,6 +25,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
+
+  // WARNA UTAMA – disamakan dengan ForgotUsernamePage
+  static const Color kPrimary = Color(0xFF00897B);
+  static const Color kPrimaryLight = Color(0xFF4DB6AC);
+  static const Color kBackground = Color(0xFFF8FFFE);
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
@@ -95,6 +103,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // ==================== LOGIC LOGIN ====================
+
   Future<void> loginUser() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -105,7 +115,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.1.6:8000/api/login'),
+        Uri.parse('http://10.19.0.247:8000/api/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -122,20 +132,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         await _saveCredentials();
 
         final token = data['data']['token'] as String;
+        await AuthService.saveToken(token);
+
         final user = data['data']['user'] as Map<String, dynamic>;
         final role = (user['role'] as String?)?.toLowerCase() ?? '';
 
         final prefs = await SharedPreferences.getInstance();
+
         await prefs.setString('token', token);
         await prefs.setString('username', user['username'] ?? '');
         await prefs.setString('role', user['role'] ?? '');
         await prefs.setInt('user_id', (user['id'] as num?)?.toInt() ?? 0);
 
-        // Kalau pasien, ambil profile pasien_id
         if (role == 'pasien') {
           try {
             final profileResponse = await http.get(
-              Uri.parse('http://192.168.1.6:8000/api/pasien/profile'),
+              Uri.parse('http://10.19.0.247:8000/api/pasien/profile'),
               headers: {
                 'Authorization': 'Bearer $token',
                 'Content-Type': 'application/json',
@@ -153,28 +165,24 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         }
 
         _showSuccessSnackBar('Selamat datang, ${user['username']}!');
+
         if (role == 'dokter') {
-          // simpan juga sebagai token khusus dokter
           await prefs.setString('dokter_token', token);
-          // sanity check: pastikan token valid untuk route dokter
           final meRes = await http.get(
-            Uri.parse('http://192.168.1.6:8000/api/dokter/get-data-dokter'),
+            Uri.parse('http://10.19.0.247:8000/api/dokter/get-data-dokter'),
             headers: {
               'Authorization': 'Bearer $token',
               'Accept': 'application/json',
             },
           );
           if (meRes.statusCode != 200) {
-            // fallback: gunakan endpoint login-dokter untuk dapat token yang “benar”
             await _loginAsDokter(username, password);
-            return; // _loginAsDokter akan navigate sendiri
+            return;
           }
         }
+
         if (!mounted) return;
         if (role == 'dokter') {
-          // Kalau ingin verifikasi lagi via endpoint khusus dokter, panggil _loginAsDokter:
-          // await _loginAsDokter(username, password); return;
-
           Navigator.pushReplacement(
             context,
             PageRouteBuilder(
@@ -206,9 +214,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         return;
       }
 
-      // --- Error handling ---
       if (response.statusCode == 401) {
-        // Akan berisi "Username salah" ATAU "Password salah"
         final msg = (data['message'] as String?) ?? 'Kredensial tidak valid';
         _showErrorSnackBar(msg);
       } else if (response.statusCode == 403) {
@@ -241,7 +247,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _loginAsDokter(String username, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.1.6:8000/api/login-dokter'),
+        Uri.parse('http://10.19.0.247:8000/api/login-dokter'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -257,17 +263,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       if (response.statusCode == 200 && data['success'] == true) {
         final prefs = await SharedPreferences.getInstance();
         final dokterToken = data['data']['token'];
-
-        await prefs.setString('token', dokterToken); // optional (biar seragam)
-        await prefs.setString(
-          'dokter_token',
-          dokterToken,
-        ); // >>> penting untuk area dokter
+        await AuthService.saveToken(dokterToken);
+        await prefs.setString('token', dokterToken);
+        await prefs.setString('dokter_token', dokterToken);
         await prefs.setString('username', data['data']['user']['username']);
         await prefs.setString('role', data['data']['user']['role']);
         await prefs.setInt('user_id', data['data']['user']['id']);
-
-        // ... lanjut snackbar & navigate
 
         _showSuccessSnackBar(
           'Selamat datang, Dr. ${data['data']['user']['username']}!',
@@ -289,7 +290,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           );
         }
       } else if (response.statusCode == 401) {
-        // Bisa "Username salah" atau "Password salah"
         _showErrorSnackBar(
           (data['message'] as String?) ?? 'Kredensial tidak valid',
         );
@@ -298,7 +298,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       } else if (response.statusCode == 422) {
         final errors = (data['errors'] ?? {}) as Map<String, dynamic>;
         final msgs = <String>[];
-        for (final k in ['username', 'password']) {
+        for (final k in ['email', 'password']) {
           if (errors[k] is List && (errors[k] as List).isNotEmpty) {
             msgs.add((errors[k] as List).first.toString());
           }
@@ -325,7 +325,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       await prefs.setInt('user_id', data['data']['user']['id']);
 
       final profileResponse = await http.get(
-        Uri.parse('http://192.168.1.6:8000/api/pasien/profile'),
+        Uri.parse('http://10.19.0.247:8000/api/pasien/profile'),
         headers: {
           'Authorization': 'Bearer ${data['data']['token']}',
           'Content-Type': 'application/json',
@@ -372,7 +372,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const FaIcon(
+              FontAwesomeIcons.circleCheck,
+              color: Colors.white,
+              size: 18,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(message, style: const TextStyle(fontSize: 14)),
@@ -393,7 +397,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.error_outline, color: Colors.white, size: 20),
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              color: Colors.white,
+              size: 18,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(message, style: const TextStyle(fontSize: 14)),
@@ -428,54 +436,582 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return null;
   }
 
+  // ======================== LAYOUT BARU (WARNA TEAL) ========================
+
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isTablet = size.width > 600;
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FFFE),
+      backgroundColor: kBackground,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: isTablet ? 400 : double.infinity,
-              ),
-              padding: EdgeInsets.symmetric(
-                horizontal: isTablet ? 32 : 24,
-                vertical: 24,
-              ),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final bool isDesktop = constraints.maxWidth >= 900;
+
+            if (isDesktop) {
+              // Layar lebar: kiri gambar, kanan form
+              return Row(
+                children: [
+                  Expanded(child: _buildLeftPanel(true)),
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 40,
+                            vertical: 24,
+                          ),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 480),
+                            child: _buildRightPanel(isTablet: true),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            } else {
+              // Mobile: Fullscreen dengan background image dan glassmorphism form
+              return Stack(
+                children: [
+                  // Background Image Fullscreen
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            kPrimary.withOpacity(0.7),
+                            const Color(0xFF00695C).withOpacity(0.8),
+                          ],
+                        ),
+                        image: const DecorationImage(
+                          image: AssetImage('assets/gambar/loginpage.png'),
+                          fit: BoxFit.cover,
+                          colorFilter: ColorFilter.mode(
+                            Colors.black38,
+                            BlendMode.darken,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Logo di atas
+                  Positioned(
+                    top: 40,
+                    left: 24,
+                    right: 24,
+                    child: Row(
                       children: [
-                        const SizedBox(height: 40),
-
-                        // Logo and Title Section
-                        _buildHeaderSection(isTablet),
-
-                        SizedBox(height: isTablet ? 48 : 40),
-
-                        // Login Form Card
-                        _buildLoginForm(isTablet),
-
-                        SizedBox(height: isTablet ? 32 : 24),
-
-                        // Additional Options
-                        _buildAdditionalOptions(),
-
-                        const SizedBox(height: 40),
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.95),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(7),
+                            child: Image.asset(
+                              'assets/gambar/logo.png',
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Royal Clinic',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black26,
+                                offset: Offset(0, 2),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
+
+                  // Glassmorphism Form
+                  Center(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 100,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
+                        child: _buildGlassmorphismForm(),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  // Panel kiri – gambar loginpage + overlay teal
+  Widget _buildLeftPanel(bool isDesktop) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [kPrimary, Color(0xFF00695C)],
+        ),
+        image: const DecorationImage(
+          image: AssetImage('assets/gambar/loginpage.png'),
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(Colors.black26, BlendMode.srcOver),
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: 24,
+            left: 24,
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Image.asset(
+                      'assets/gambar/logo.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Royal Clinic',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isDesktop ? 20 : 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Panel kanan – header + card form (warna sama ForgotUsername)
+  Widget _buildRightPanel({required bool isTablet}) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeaderSection(isTablet),
+              const SizedBox(height: 24),
+              _buildLoginForm(isTablet),
+              const SizedBox(height: 24),
+              _buildAdditionalOptions(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassmorphismForm() {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withOpacity(0.25),
+                    Colors.white.withOpacity(0.15),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 30,
+                    offset: const Offset(0, 15),
+                  ),
+                ],
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Welcome Back!',
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withOpacity(0.3),
+                                offset: const Offset(0, 2),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Silakan masuk untuk melanjutkan',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.white.withOpacity(0.95),
+                            height: 1.4,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withOpacity(0.2),
+                                offset: const Offset(0, 1),
+                                blurRadius: 3,
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Username Field
+                    _buildGlassTextField(
+                      controller: usernameController,
+                      label: 'Username',
+                      hint: 'Masukkan username',
+                      icon: FontAwesomeIcons.user,
+                      validator: _validateUsername,
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Password Field
+                    _buildGlassTextField(
+                      controller: passwordController,
+                      label: 'Password',
+                      hint: 'Masukkan password',
+                      icon: FontAwesomeIcons.lock,
+                      obscureText: _obscurePassword,
+                      validator: _validatePassword,
+                      suffixIcon: IconButton(
+                        icon: FaIcon(
+                          _obscurePassword
+                              ? FontAwesomeIcons.eyeSlash
+                              : FontAwesomeIcons.eye,
+                          color: Colors.white.withOpacity(0.8),
+                          size: 18,
+                        ),
+                        onPressed: () {
+                          setState(() => _obscurePassword = !_obscurePassword);
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // Remember Me & Forgot Password
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: Checkbox(
+                            value: _rememberMe,
+                            onChanged: (value) =>
+                                setState(() => _rememberMe = value ?? false),
+                            activeColor: Colors.white,
+                            checkColor: kPrimary,
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.8),
+                              width: 2,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Ingat saya',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.95),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              PageRouteBuilder(
+                                pageBuilder:
+                                    (context, animation, secondaryAnimation) =>
+                                        const ForgotPasswordPage(),
+                                transitionsBuilder: (context, animation,
+                                    secondaryAnimation, child) {
+                                  return SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(1.0, 0.0),
+                                      end: Offset.zero,
+                                    ).animate(animation),
+                                    child: child,
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                          child: Text(
+                            'Lupa Password?',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  offset: const Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // Login Button
+                    _buildGlassLoginButton(),
+
+                    const SizedBox(height: 24),
+
+                    // Divider
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Divider(
+                            color: Colors.white.withOpacity(0.4),
+                            thickness: 1,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            'atau',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Divider(
+                            color: Colors.white.withOpacity(0.4),
+                            thickness: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Lupa Username & Password
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSolidWhiteButton(
+                            icon: FontAwesomeIcons.userLarge,
+                            label: 'Lupa Username',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation,
+                                          secondaryAnimation) =>
+                                      const ForgotUsernamePage(),
+                                  transitionsBuilder: (context, animation,
+                                      secondaryAnimation, child) {
+                                    return SlideTransition(
+                                      position: Tween<Offset>(
+                                        begin: const Offset(1.0, 0.0),
+                                        end: Offset.zero,
+                                      ).animate(animation),
+                                      child: child,
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildSolidWhiteButton(
+                            icon: FontAwesomeIcons.lockOpen,
+                            label: 'Lupa Password',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation,
+                                          secondaryAnimation) =>
+                                      const ForgotPasswordPage(),
+                                  transitionsBuilder: (context, animation,
+                                      secondaryAnimation, child) {
+                                    return SlideTransition(
+                                      position: Tween<Offset>(
+                                        begin: const Offset(1.0, 0.0),
+                                        end: Offset.zero,
+                                      ).animate(animation),
+                                      child: child,
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Register Button - Solid White
+                    Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            PageRouteBuilder(
+                              pageBuilder:
+                                  (context, animation, secondaryAnimation) =>
+                                      const RegisterPage(),
+                              transitionsBuilder:
+                                  (context, animation, secondaryAnimation, child) {
+                                return SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(1.0, 0.0),
+                                    end: Offset.zero,
+                                  ).animate(animation),
+                                  child: child,
+                                );
+                              },
+                            ),
+                          );
+                        },
+                        style: TextButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            FaIcon(FontAwesomeIcons.userPlus,
+                                size: 18, color: kPrimary),
+                            SizedBox(width: 10),
+                            Text(
+                              'Daftar Akun Baru',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: kPrimary,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // App Version
+                    Center(
+                      child: Text(
+                        'Royal Clinic Mobile App v1.0.0',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.7),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -485,65 +1021,712 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildHeaderSection(bool isTablet) {
+  // Glass TextField untuk glassmorphism effect
+  Widget _buildGlassTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+    Widget? suffixIcon,
+  }) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Logo with Animation
-        TweenAnimationBuilder<double>(
-          duration: const Duration(milliseconds: 1000),
-          tween: Tween(begin: 0.0, end: 1.0),
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: Container(
-                width: isTablet ? 100 : 80,
-                height: isTablet ? 100 : 80,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF00897B).withOpacity(0.15),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: Colors.white.withOpacity(0.95),
+            letterSpacing: 0.3,
+            shadows: [
+              Shadow(
+                color: Colors.black.withOpacity(0.2),
+                offset: const Offset(0, 1),
+                blurRadius: 2,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: controller,
+          obscureText: obscureText,
+          validator: validator,
+          style: const TextStyle(
+            fontSize: 15,
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+            ),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 14, right: 10),
+              child: FaIcon(icon, color: Colors.white.withOpacity(0.9), size: 18),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 0,
+              minHeight: 0,
+            ),
+            suffixIcon: suffixIcon,
+            filled: true,
+            fillColor: Colors.white.withOpacity(0.15),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(
+                color: Colors.white.withOpacity(0.3),
+                width: 1.5,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: Colors.white, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(
+                color: Colors.red.shade300,
+                width: 1.5,
+              ),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: Colors.red.shade300, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
+            ),
+            errorStyle: TextStyle(
+              fontSize: 12,
+              color: Colors.red.shade200,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Glass Login Button
+  Widget _buildGlassLoginButton() {
+    return Container(
+      width: double.infinity,
+      height: 54,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Color(0xFFF0F0F0)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: isLoading ? null : loginUser,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: isLoading
+            ? SizedBox(
+                height: 22,
+                width: 22,
+                child: CircularProgressIndicator(
+                  color: kPrimary,
+                  strokeWidth: 2.5,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Image.asset(
-                    'assets/gambar/logo.png',
-                    width: isTablet ? 68 : 48,
-                    height: isTablet ? 68 : 48,
-                    fit: BoxFit.contain,
+              )
+            : Text(
+                'Masuk',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: kPrimary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+      ),
+    );
+  }
+
+  // Solid White Button untuk Lupa Username/Password
+  Widget _buildSolidWhiteButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      height: 46,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FaIcon(icon, color: kPrimary, size: 14),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: kPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Glass Outlined Button
+  Widget _buildGlassOutlinedButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      height: 46,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.4),
+          width: 1.5,
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.15),
+            Colors.white.withOpacity(0.08),
+          ],
+        ),
+      ),
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FaIcon(icon, color: Colors.white.withOpacity(0.9), size: 14),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withOpacity(0.95),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileRightPanel() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // HEADER dengan animasi
+          FadeTransition(
+            opacity: _fadeAnimation,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome Back!',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: kPrimary,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Silakan masuk untuk melanjutkan',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.grey.shade600,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 28),
+
+          // FORM CARD dengan shadow lebih halus
+          SlideTransition(
+            position: _slideAnimation,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: kPrimary.withOpacity(0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                    spreadRadius: 0,
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Username Field
+                  _buildMobileTextField(
+                    controller: usernameController,
+                    label: 'Username',
+                    hint: 'Masukkan username',
+                    icon: FontAwesomeIcons.user,
+                    validator: _validateUsername,
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Password Field
+                  _buildMobileTextField(
+                    controller: passwordController,
+                    label: 'Password',
+                    hint: 'Masukkan password',
+                    icon: FontAwesomeIcons.lock,
+                    obscureText: _obscurePassword,
+                    validator: _validatePassword,
+                    suffixIcon: IconButton(
+                      icon: FaIcon(
+                        _obscurePassword
+                            ? FontAwesomeIcons.eyeSlash
+                            : FontAwesomeIcons.eye,
+                        color: Colors.grey.shade500,
+                        size: 18,
+                      ),
+                      onPressed: () {
+                        setState(() => _obscurePassword = !_obscurePassword);
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+                  
+                  // Remember Me & Forgot Password
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: Checkbox(
+                          value: _rememberMe,
+                          onChanged: (value) =>
+                              setState(() => _rememberMe = value ?? false),
+                          activeColor: kPrimary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Ingat saya',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            PageRouteBuilder(
+                              pageBuilder: (context, animation, secondaryAnimation) =>
+                                  const ForgotPasswordPage(),
+                              transitionsBuilder:
+                                  (context, animation, secondaryAnimation, child) {
+                                return SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(1.0, 0.0),
+                                    end: Offset.zero,
+                                  ).animate(animation),
+                                  child: child,
+                                );
+                              },
+                            ),
+                          );
+                        },
+                        child: Text(
+                          'Lupa Password?',
+                          style: TextStyle(
+                            color: kPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+                  
+                  // Login Button
+                  _buildLoginButton(false),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Divider
+          Row(
+            children: [
+              Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'atau',
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
-            );
-          },
+              Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Lupa Username & Password - Tampilan Compact
+          Row(
+            children: [
+              Expanded(
+                child: _buildOutlinedButton(
+                  icon: FontAwesomeIcons.userLarge,
+                  label: 'Lupa Username',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            const ForgotUsernamePage(),
+                        transitionsBuilder:
+                            (context, animation, secondaryAnimation, child) {
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(1.0, 0.0),
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: child,
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildOutlinedButton(
+                  icon: FontAwesomeIcons.lockOpen,
+                  label: 'Lupa Password',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            const ForgotPasswordPage(),
+                        transitionsBuilder:
+                            (context, animation, secondaryAnimation, child) {
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(1.0, 0.0),
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: child,
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // Register Button
+          Container(
+            height: 52,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kPrimary, width: 1.8),
+            ),
+            child: TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        const RegisterPage(),
+                    transitionsBuilder:
+                        (context, animation, secondaryAnimation, child) {
+                      return SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(1.0, 0.0),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      );
+                    },
+                  ),
+                );
+              },
+              style: TextButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  FaIcon(FontAwesomeIcons.userPlus, size: 18, color: kPrimary),
+                  SizedBox(width: 10),
+                  Text(
+                    'Daftar Akun Baru',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: kPrimary,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+          
+          // App Version
+          Center(
+            child: Text(
+              'Royal Clinic Mobile App v1.0.0',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade400,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper method untuk outlined button
+  Widget _buildOutlinedButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      height: 46,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300, width: 1.5),
+      ),
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
         ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FaIcon(icon, color: Colors.grey.shade600, size: 14),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-        SizedBox(height: isTablet ? 24 : 20),
-
-        // App Title
+  // TextField khusus untuk mobile dengan design yang lebih clean
+  Widget _buildMobileTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+    Widget? suffixIcon,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text(
-          'Royal Clinic',
+          label,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade800,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: controller,
+          obscureText: obscureText,
+          validator: validator,
+          style: const TextStyle(
+            fontSize: 15,
+            color: Colors.black87,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(
+              color: Colors.grey.shade400,
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+            ),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 14, right: 10),
+              child: FaIcon(icon, color: kPrimary, size: 18),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 0,
+              minHeight: 0,
+            ),
+            suffixIcon: suffixIcon,
+            filled: true,
+            fillColor: Colors.grey.shade50,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: Colors.grey.shade200, width: 1.5),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: kPrimary, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Colors.red, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
+            ),
+            errorStyle: TextStyle(
+              fontSize: 12,
+              color: Colors.red.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeaderSection(bool isTablet) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Welcome Back!',
           style: TextStyle(
             fontSize: isTablet ? 32 : 28,
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF00897B),
+            color: kPrimary,
             letterSpacing: 0.5,
           ),
         ),
-
-        SizedBox(height: isTablet ? 12 : 8),
-
+        const SizedBox(height: 6),
         Text(
           'Masuk ke akun Anda',
           style: TextStyle(
-            fontSize: isTablet ? 18 : 16,
+            fontSize: isTablet ? 16 : 14,
             color: Colors.grey.shade600,
-            fontWeight: FontWeight.w400,
           ),
         ),
       ],
@@ -567,32 +1750,30 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         padding: EdgeInsets.all(isTablet ? 32 : 24),
         child: Column(
           children: [
-            // Username Field
             _buildTextField(
               controller: usernameController,
               label: 'Username',
               hint: 'Masukkan username Anda',
-              icon: Icons.person_outline,
+              icon: FontAwesomeIcons.user,
               validator: _validateUsername,
               isTablet: isTablet,
             ),
-
             SizedBox(height: isTablet ? 24 : 20),
-
-            // Password Field
             _buildTextField(
               controller: passwordController,
               label: 'Password',
               hint: 'Masukkan password Anda',
-              icon: Icons.lock_outline,
+              icon: FontAwesomeIcons.lock,
               obscureText: _obscurePassword,
               validator: _validatePassword,
               isTablet: isTablet,
               suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                icon: FaIcon(
+                  _obscurePassword
+                      ? FontAwesomeIcons.eyeSlash
+                      : FontAwesomeIcons.eye,
                   color: Colors.grey.shade500,
-                  size: isTablet ? 24 : 20,
+                  size: isTablet ? 18 : 16,
                 ),
                 onPressed: () {
                   setState(() {
@@ -601,12 +1782,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 },
               ),
             ),
-
-            SizedBox(height: isTablet ? 20 : 16),
-
-            // Remember Me only (removed duplicate forgot password)
+            SizedBox(height: isTablet ? 18 : 14),
             Row(
-              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 SizedBox(
                   width: 20,
@@ -618,7 +1795,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         _rememberMe = value ?? false;
                       });
                     },
-                    activeColor: const Color(0xFF00897B),
+                    activeColor: kPrimary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
@@ -630,12 +1807,39 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     color: Colors.grey.shade700,
                   ),
                 ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            const ForgotPasswordPage(),
+                        transitionsBuilder:
+                            (context, animation, secondaryAnimation, child) {
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(1.0, 0.0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              );
+                            },
+                      ),
+                    );
+                  },
+                  child: Text(
+                    'Lupa Password?',
+                    style: TextStyle(
+                      fontSize: isTablet ? 14 : 13,
+                      color: kPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ],
             ),
-
-            SizedBox(height: isTablet ? 32 : 24),
-
-            // Login Button
+            SizedBox(height: isTablet ? 26 : 20),
             _buildLoginButton(isTablet),
           ],
         ),
@@ -676,17 +1880,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               color: Colors.grey.shade400,
               fontSize: isTablet ? 15 : 14,
             ),
-            prefixIcon: Container(
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00897B).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: const Color(0xFF00897B),
-                size: isTablet ? 22 : 20,
-              ),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 8),
+              child: FaIcon(icon, color: kPrimary, size: 18),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 0,
+              minHeight: 0,
             ),
             suffixIcon: suffixIcon,
             filled: true,
@@ -699,17 +1899,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey.shade200),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF00897B), width: 2),
+            focusedBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderSide: BorderSide(color: kPrimary, width: 2),
             ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 1),
+            errorBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderSide: BorderSide(color: Colors.red, width: 1),
             ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 2),
+            focusedErrorBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderSide: BorderSide(color: Colors.red, width: 2),
             ),
             contentPadding: EdgeInsets.symmetric(
               horizontal: 16,
@@ -734,11 +1934,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         gradient: const LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [Color(0xFF00897B), Color(0xFF4DB6AC)],
+          colors: [kPrimary, kPrimaryLight],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00897B).withOpacity(0.3),
+            color: kPrimary.withOpacity(0.3),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -778,7 +1978,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Widget _buildAdditionalOptions() {
     return Column(
       children: [
-        // Divider
         Row(
           children: [
             Expanded(child: Divider(color: Colors.grey.shade300)),
@@ -792,10 +1991,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             Expanded(child: Divider(color: Colors.grey.shade300)),
           ],
         ),
-
         const SizedBox(height: 20),
-
-        // Lupa Username dan Lupa Password
+        // Lupa username & password
         Row(
           children: [
             Expanded(
@@ -825,19 +2022,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       ),
                     );
                   },
-                  style: TextButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.person_search,
+                      FaIcon(
+                        FontAwesomeIcons
+                            .userLarge, // atau FontAwesomeIcons.user
                         color: Colors.grey.shade600,
-                        size: 16,
+                        size: 14,
                       ),
+
                       const SizedBox(width: 6),
                       Text(
                         'Lupa Username',
@@ -880,18 +2074,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       ),
                     );
                   },
-                  style: TextButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.lock_outline,
+                      FaIcon(
+                        FontAwesomeIcons.lockOpen,
                         color: Colors.grey.shade600,
-                        size: 16,
+                        size: 14,
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -909,16 +2098,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
           ],
         ),
-
         const SizedBox(height: 20),
-
-        // Register Link
+        // Register
         Container(
           width: double.infinity,
           height: 50,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF00897B), width: 1.5),
+            border: Border.all(color: kPrimary, width: 1.5),
           ),
           child: TextButton(
             onPressed: () {
@@ -940,64 +2127,29 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
               );
             },
-            style: TextButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.person_add_outlined,
-                  color: const Color(0xFF00897B),
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                const Text(
+              children: const [
+                FaIcon(FontAwesomeIcons.userPlus, color: kPrimary, size: 16),
+                SizedBox(width: 8),
+                Text(
                   'Daftar Akun Baru',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF00897B),
+                    color: kPrimary,
                   ),
                 ),
               ],
             ),
           ),
         ),
-
-        const SizedBox(height: 16),
-
-        // App Info
+        const SizedBox(height: 12),
         Text(
           'Royal Clinic Mobile App v1.0.0',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
         ),
       ],
-    );
-  }
-
-  void _showInfoDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.info_outline, color: const Color(0xFF00897B)),
-            const SizedBox(width: 8),
-            const Text('Informasi'),
-          ],
-        ),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(color: Color(0xFF00897B))),
-          ),
-        ],
-      ),
     );
   }
 }

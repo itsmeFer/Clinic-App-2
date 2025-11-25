@@ -76,7 +76,7 @@ class _PembelianObatState extends State<PembelianObat> {
       }
 
       final response = await http.get(
-        Uri.parse('http://192.168.1.6:8000/api/penjualan-obat/obat/list'),
+        Uri.parse('http://10.19.0.247:8000/api/penjualan-obat/obat/list'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -134,7 +134,7 @@ class _PembelianObatState extends State<PembelianObat> {
 
       final response = await http.get(
         Uri.parse(
-          'http://192.168.1.6:8000/api/pembayaran/get-data-metode-pembayaran',
+          'http://10.19.0.247:8000/api/pembayaran/get-data-metode-pembayaran',
         ),
         headers: {
           'Authorization': 'Bearer $token',
@@ -284,7 +284,7 @@ Future<void> _prosesPembelian() async {
     }
 
     final response = await http.post(
-      Uri.parse('http://192.168.1.6:8000/api/penjualan-obat/store'),
+      Uri.parse('http://10.19.0.247:8000/api/penjualan-obat/store'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',

@@ -27,7 +27,7 @@ class LocalNotificationService {
 
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.6:8000/api',
+    defaultValue: 'http://10.19.0.247:8000/api',
   );
   static const int _maxStoredNotifications = 100;
   static const Duration _pollingInterval = Duration(seconds: 30);
